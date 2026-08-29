@@ -1,0 +1,20 @@
+configuration:
+  use_algo: "token_bucket"
+  token_bucket:
+    capacity: 100
+    rate: 20 # Per second
+  fixed_window:
+    window_size: 100
+    max_requests: 100
+  rolling_window:
+    window_size: 100
+    max_requests: 1000
+  rolling_window_redis:
+    window_size: 100
+    TTL: 60
+    max_requests: 1000
+    min_interval: 0.5
+  rolling_window_concurrent_redis:
+    window_size: 100
+    TTL: 60
+    max_requests: 1000
