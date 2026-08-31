@@ -11,39 +11,24 @@ type Root struct {
 	Configuration Configuration `yaml:"configuration"`
 }
 type Configuration struct {
-	UsedAlgo                                  string                          `yaml:"use_algo"`
-	TokenBucketConfiguration                  TokenBucketConfiguration        `yaml:"token_bucket"`
-	FixedWindowConfiguration                  FixedWindowConfiguration        `yaml:"fixed_window"`
-	RollingWindowConfiguration                RollingWindowConfiguration      `yaml:"rolling_window"`
-	RollingWindowRedisConfiguration           RollingWindowRedisConfiguration `yaml:"rolling_window_redis"`
-	RollingWindowConcurrentRedisConfiguration RollingWindowConcurrentRedis    `yaml:"rolling_window_concurrent_redis"`
-}
-type TokenBucketConfiguration struct {
-	Capacity int `yaml:"capacity"`
-	Rate     int `yaml:"rate"`
+	UsedAlgo         string                   `yaml:"use_algo"`
+	IdentifyClientBy []IdentificationStrategy `yaml:"identify_client_by"`
+	AlgoSettings     AlgoSettings             `yaml:"algo_settings"`
 }
 
-type FixedWindowConfiguration struct {
-	WindowSize  int `yaml:"window_size"`
-	MaxRequests int `yaml:"max_requests"`
+type IdentificationStrategy struct {
+	Type       string `yaml:"type,omitempty"`
+	Format     string `yaml:"format,omitempty"`
+	CookieName string `yaml:"cookie_name,omitempty"`
+	Version    string `yaml:"version,omitempty"`
 }
-
-type RollingWindowConfiguration struct {
-	WindowSize  int `yaml:"window_size"`
-	MaxRequests int `yaml:"max_requests"`
-}
-
-type RollingWindowRedisConfiguration struct {
-	WindowSize  int     `yaml:"window_size"`
-	TTL         int     `yaml:"TTL"`
-	MaxRequests int     `yaml:"max_requests"`
-	MinInterval float64 `yaml:"min_interval"`
-}
-
-type RollingWindowConcurrentRedis struct {
-	Capacity    int `yaml:"window_size"`
-	TTL         int `yaml:"TTL"`
-	MaxRequests int `yaml:"max_requests"`
+type AlgoSettings struct {
+	Capacity    *int64   `yaml:"capacity"`
+	Rate        *float64 `yaml:"rate"`
+	WindowSize  *string  `yaml:"window_size"`
+	MaxRequests *int64   `yaml:"max_requests"`
+	TTL         *string  `yaml:"ttl"`
+	MinInterval *string  `yaml:"min_interval"`
 }
 
 func ReadConfig() (Configuration, error) {

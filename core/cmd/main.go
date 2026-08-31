@@ -7,7 +7,7 @@ import (
 )
 
 func main() {
-	http.HandleFunc("/health", handlers.HealthHandler)
-	http.HandleFunc("/getConfig", handlers.ParseConfig)
+	http.HandleFunc("GET /health", handlers.HealthHandler)
+	http.HandleFunc("GET /getConfig", handlers.ParseConfig)
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
