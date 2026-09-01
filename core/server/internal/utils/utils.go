@@ -1,19 +1,13 @@
 package utils
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"qwrttqr-rate-limiter/core/server/internal/config"
+	"qwrttqr-rate-limiter/core/server/internal/interfaces"
 	"reflect"
 )
-
-func ExtractIdentificationKey(r *http.Request, rules []config.IdentificationStrategy) {
-	for _, strategy := range rules {
-		if strategy.Type == "authorization_header" {
-
-		}
-	}
-}
 
 func CheckRequiredFields(cfg config.AlgoSettings, requiredTags []string) error {
 	value := reflect.ValueOf(cfg)
@@ -38,4 +32,15 @@ func CheckRequiredFields(cfg config.AlgoSettings, requiredTags []string) error {
 		}
 	}
 	return nil
+}
+
+func ReadIncomingBody(r *http.Request) (*interfaces.IncomingBody, error) {
+	defer r.Body.Close()
+
+	var body interfaces.IncomingBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		return nil, err
+	}
+
+	return &body, nil
 }

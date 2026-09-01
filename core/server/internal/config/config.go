@@ -11,17 +11,11 @@ type Root struct {
 	Configuration Configuration `yaml:"configuration"`
 }
 type Configuration struct {
-	UsedAlgo         string                   `yaml:"use_algo"`
-	IdentifyClientBy []IdentificationStrategy `yaml:"identify_client_by"`
-	AlgoSettings     AlgoSettings             `yaml:"algo_settings"`
+	UsedAlgo     string       `yaml:"use_algo"`
+	Store        string       `yaml:"store"`
+	AlgoSettings AlgoSettings `yaml:"algo_settings"`
 }
 
-type IdentificationStrategy struct {
-	Type       string `yaml:"type,omitempty"`
-	Format     string `yaml:"format,omitempty"`
-	CookieName string `yaml:"cookie_name,omitempty"`
-	Version    string `yaml:"version,omitempty"`
-}
 type AlgoSettings struct {
 	Capacity    *int64   `yaml:"capacity"`
 	Rate        *float64 `yaml:"rate"`
