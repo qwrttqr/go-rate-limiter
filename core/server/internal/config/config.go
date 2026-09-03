@@ -11,9 +11,10 @@ type Root struct {
 	Configuration Configuration `yaml:"configuration"`
 }
 type Configuration struct {
-	UsedAlgo     string       `yaml:"use_algo"`
-	Store        string       `yaml:"store"`
-	AlgoSettings AlgoSettings `yaml:"algo_settings"`
+	UsedAlgo      string        `yaml:"use_algo"`
+	Store         string        `yaml:"store"`
+	AlgoSettings  AlgoSettings  `yaml:"algo_settings"`
+	CacheSettings CacheSettings `yaml:"cache_settings"`
 }
 
 type AlgoSettings struct {
@@ -23,6 +24,11 @@ type AlgoSettings struct {
 	MaxRequests *int64   `yaml:"max_requests"`
 	TTL         *string  `yaml:"ttl"`
 	MinInterval *string  `yaml:"min_interval"`
+}
+
+type CacheSettings struct {
+	ExpirationTime *int64 `yaml:"expiration_time"`
+	EvictionTime   *int64 `yaml:"eviction_time"`
 }
 
 func ReadConfig() (Configuration, error) {

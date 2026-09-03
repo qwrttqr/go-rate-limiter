@@ -1,6 +1,9 @@
 configuration:
   store: "in_memory"
   use_algo: "rolling_window"
+  cache_settings:
+    expiration_time: 10
+    eviction_time: 15
   algo_settings:
     window_size: 100 # seconds
     max_requests: 10

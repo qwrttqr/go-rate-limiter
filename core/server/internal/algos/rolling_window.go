@@ -2,6 +2,7 @@ package algos
 
 import (
 	"net/http"
+	"qwrttqr-rate-limiter/core/server/internal/cache"
 	"qwrttqr-rate-limiter/core/server/internal/config"
 	"qwrttqr-rate-limiter/core/server/internal/utils"
 	"sync"
@@ -12,8 +13,8 @@ type RollingWindowLimiter struct {
 	WindowSize   int64
 	MaxRequests  int64
 	StorageType  string
-	inMemoryMap  sync.Map
 	limitingHook func(key string) bool
+	Cache        *cache.Cache
 }
 
 type RollingWindowState struct {
@@ -28,7 +29,7 @@ func (rwl *RollingWindowLimiter) Configure() {
 
 			currentTime := time.Now().Unix()
 			windowStart := currentTime - rwl.WindowSize
-			val, _ := rwl.inMemoryMap.LoadOrStore(key, &RollingWindowState{
+			val := rwl.Cache.LoadOrStore(key, &RollingWindowState{
 				Timestamps: make([]int64, 0, rwl.MaxRequests*2),
 			})
 			window := val.(*RollingWindowState)

@@ -2,6 +2,7 @@ package algos
 
 import (
 	"net/http"
+	"qwrttqr-rate-limiter/core/server/internal/cache"
 	"qwrttqr-rate-limiter/core/server/internal/config"
 	"qwrttqr-rate-limiter/core/server/internal/utils"
 	"sync"
@@ -13,21 +14,21 @@ type TokenBucketLimiter struct {
 	Capacity     int64
 	Rate         float64
 	StorageType  string
-	inMemoryMap  sync.Map
 	limitingHook func(key string, tokensRequired int64) bool
+	Cache        *cache.Cache
 }
 
 type BucketState struct {
 	mu         sync.Mutex
 	Tokens     int64
-	LastRefill int64 // Unix timestamp in seconds
+	LastRefill int64
 }
 
 func (tbl *TokenBucketLimiter) Configure() {
 	switch tbl.StorageType {
 	case "in_memory":
 		tbl.limitingHook = func(key string, tokensRequired int64) bool {
-			val, _ := tbl.inMemoryMap.LoadOrStore(key, &BucketState{
+			val := tbl.Cache.LoadOrStore(key, &BucketState{
 				Tokens:     tbl.Capacity,
 				LastRefill: time.Now().Unix(),
 			})
