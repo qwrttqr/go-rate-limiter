@@ -1,9 +1,9 @@
 configuration:
   store: "in_memory"
-  use_algo: "token_bucket"
+  use_algo: "rolling_window"
   algo_settings:
-    capacity: 10
-    rate: 0.5 # Per second
+    window_size: 100 # seconds
+    max_requests: 10
 #  token_bucket:
 #    capacity: 100
 #    rate: 20 # Per second

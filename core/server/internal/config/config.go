@@ -19,7 +19,7 @@ type Configuration struct {
 type AlgoSettings struct {
 	Capacity    *int64   `yaml:"capacity"`
 	Rate        *float64 `yaml:"rate"`
-	WindowSize  *string  `yaml:"window_size"`
+	WindowSize  *int64   `yaml:"window_size"`
 	MaxRequests *int64   `yaml:"max_requests"`
 	TTL         *string  `yaml:"ttl"`
 	MinInterval *string  `yaml:"min_interval"`

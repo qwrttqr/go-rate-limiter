@@ -2,7 +2,6 @@ package interfaces
 
 import (
 	"net/http"
-	"qwrttqr-rate-limiter/core/server/internal/config"
 )
 
 type IncomingBody struct {
@@ -11,7 +10,6 @@ type IncomingBody struct {
 }
 
 type RateLimiterInterface interface {
-	ValidateAlgoSettings(config.Configuration) error
 	Configure()
 	LimitHTTP(w http.ResponseWriter, r *http.Request)
 }
