@@ -16,7 +16,7 @@ func NewRateLimiter() (interfaces.RateLimiterInterface, error) {
 	}
 
 	// 1. Declare the pointer OUTSIDE the if-block scope so it propagates down
-	var cacheInstance *cache.Cache
+	var cacheInstance *cache.InMemoryCache
 
 	// 2. Initialize it only if in_memory storage is requested
 	if cfg.Store == "in_memory" {

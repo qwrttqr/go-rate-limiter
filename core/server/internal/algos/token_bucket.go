@@ -2,8 +2,8 @@ package algos
 
 import (
 	"net/http"
-	"qwrttqr-rate-limiter/core/server/internal/cache"
 	"qwrttqr-rate-limiter/core/server/internal/config"
+	"qwrttqr-rate-limiter/core/server/internal/interfaces"
 	"qwrttqr-rate-limiter/core/server/internal/utils"
 	"sync"
 	"time"
@@ -15,7 +15,8 @@ type TokenBucketLimiter struct {
 	Rate         float64
 	StorageType  string
 	limitingHook func(key string, tokensRequired int64) bool
-	Cache        *cache.Cache
+	Cache        interfaces.Cache
+	Now          func() int64
 }
 
 type BucketState struct {
@@ -25,12 +26,17 @@ type BucketState struct {
 }
 
 func (tbl *TokenBucketLimiter) Configure() {
+	if tbl.Now == nil {
+		tbl.Now = func() int64 {
+			return time.Now().Unix()
+		}
+	}
 	switch tbl.StorageType {
 	case "in_memory":
 		tbl.limitingHook = func(key string, tokensRequired int64) bool {
 			val := tbl.Cache.LoadOrStore(key, &BucketState{
 				Tokens:     tbl.Capacity,
-				LastRefill: time.Now().Unix(),
+				LastRefill: tbl.Now(),
 			})
 
 			bucket := val.(*BucketState)
@@ -40,20 +46,20 @@ func (tbl *TokenBucketLimiter) Configure() {
 
 			tokens := bucket.Tokens
 			lastRefill := bucket.LastRefill
-			currentTime := time.Now().Unix()
+			currentTime := tbl.Now()
 
 			timePassed := currentTime - lastRefill
 			refillTokens := float64(timePassed) * tbl.Rate
 			newTokens := min(tbl.Capacity, tokens+int64(refillTokens))
-			lastRefill = time.Now().Unix()
+			lastRefill = tbl.Now()
 
 			if newTokens >= tokensRequired {
 				bucket.Tokens = newTokens - tokensRequired
 				bucket.LastRefill = lastRefill
 				return true
-			} else {
-				return false
 			}
+
+			return false
 		}
 	}
 }

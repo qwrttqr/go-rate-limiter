@@ -2,8 +2,8 @@ package algos
 
 import (
 	"net/http"
-	"qwrttqr-rate-limiter/core/server/internal/cache"
 	"qwrttqr-rate-limiter/core/server/internal/config"
+	"qwrttqr-rate-limiter/core/server/internal/interfaces"
 	"qwrttqr-rate-limiter/core/server/internal/utils"
 	"sync"
 	"time"
@@ -14,7 +14,8 @@ type FixedWindowLimiter struct {
 	MaxRequests  int64
 	StorageType  string
 	limitingHook func(key string) bool
-	Cache        *cache.Cache
+	Cache        interfaces.Cache
+	Now          func() int64
 }
 
 type FixedWindowState struct {
@@ -24,11 +25,16 @@ type FixedWindowState struct {
 }
 
 func (fwl *FixedWindowLimiter) Configure() {
+	if fwl.Now == nil {
+		fwl.Now = func() int64 {
+			return time.Now().Unix()
+		}
+	}
 	switch fwl.StorageType {
 	case "in_memory":
 		fwl.limitingHook = func(key string) bool {
 
-			currentTime := time.Now().Unix()
+			currentTime := fwl.Now()
 			currentWindow := currentTime / fwl.WindowSize
 			windowStart := currentWindow * fwl.WindowSize
 			val := fwl.Cache.LoadOrStore(key, &FixedWindowState{

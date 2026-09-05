@@ -13,7 +13,7 @@ type cacheEntry struct {
 	time  int64
 }
 
-type Cache struct {
+type InMemoryCache struct {
 	entries        map[string]*cacheEntry
 	mutex          sync.Mutex
 	commandChannel chan string
@@ -21,13 +21,13 @@ type Cache struct {
 	ticker         *time.Ticker
 }
 
-func (cache *Cache) Store(key string, value any) {
+func (cache *InMemoryCache) Store(key string, value any) {
 	cache.mutex.Lock()
 	cache.entries[key] = &cacheEntry{entry: value, time: time.Now().Unix()}
 	cache.mutex.Unlock()
 }
 
-func (cache *Cache) Get(key string) (any, error) {
+func (cache *InMemoryCache) Get(key string) (any, error) {
 	cache.mutex.Lock()
 	defer cache.mutex.Unlock()
 	result, present := cache.entries[key]
@@ -37,7 +37,7 @@ func (cache *Cache) Get(key string) (any, error) {
 	return result.entry, nil
 }
 
-func (cache *Cache) LoadOrStore(key string, value any) any {
+func (cache *InMemoryCache) LoadOrStore(key string, value any) any {
 	cache.mutex.Lock()
 	defer cache.mutex.Unlock()
 	result, present := cache.entries[key]
@@ -48,13 +48,13 @@ func (cache *Cache) LoadOrStore(key string, value any) any {
 	return result.entry
 }
 
-func (cache *Cache) Delete(key string) {
+func (cache *InMemoryCache) Delete(key string) {
 	cache.mutex.Lock()
 	delete(cache.entries, key)
 	cache.mutex.Unlock()
 }
 
-func (cache *Cache) handleEviction() {
+func (cache *InMemoryCache) handleEviction() {
 	currentTime := time.Now().Unix()
 	log.Println("doing cache eviction")
 	cache.mutex.Lock()
@@ -68,13 +68,13 @@ func (cache *Cache) handleEviction() {
 	}
 }
 
-func (cache *Cache) sendCommand(cmd string) {
+func (cache *InMemoryCache) sendCommand(cmd string) {
 	cache.commandChannel <- cmd
 }
 
-func NewCache(expirationTime int64, evictionInterval time.Duration) *Cache {
+func NewCache(expirationTime int64, evictionInterval time.Duration) *InMemoryCache {
 	ticker := time.NewTicker(evictionInterval)
-	cache := &Cache{
+	cache := &InMemoryCache{
 		entries:        make(map[string]*cacheEntry),
 		expirationTime: expirationTime,
 		commandChannel: make(chan string),

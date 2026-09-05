@@ -41,6 +41,8 @@ func ReadIncomingBody(r *http.Request) (*interfaces.IncomingBody, error) {
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		return nil, err
 	}
-
+	if body.ClientKey == "" {
+		return nil, fmt.Errorf("client key should be not empty")
+	}
 	return &body, nil
 }
