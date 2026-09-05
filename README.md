@@ -38,5 +38,12 @@ configuration:
 - `cache_settings` allows you to control cache expiration time and (in case of in_memory cache) cache keys eviction
   intervals.
 - `algo_settings` key is responsible for configuration for algo:
-  - use `window_size` and `max_requests` for `rolling_window` and `fixed_window` algorithms.
-  - use `capacity` and `rate` for `token_bucket` algo.
+    - use `window_size` and `max_requests` for `rolling_window` and `fixed_window` algorithms.
+    - use `capacity` and `rate` for `token_bucket` algo.
+
+### Build
+
+If you want to use rate-limiter as standalone service build it as container:
+`docker build -t <image-name> .`.
+
+And then run `docker run --rm -p 8080:8080 <image-name>`.
