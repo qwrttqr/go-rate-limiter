@@ -22,15 +22,19 @@ algorithms.
 The service contains one small config file:
 
 ```yaml
-configuration:
-  store: "in_memory"
-  use_algo: "rolling_window"
-  cache_settings:
-    expiration_time: 10
-    eviction_time: 15
-  algo_settings:
-    window_size: 100 # seconds
-    max_requests: 10
+store: "in_memory"
+use_algo: "rolling_window"
+algo_settings:
+  window_size: 100 # seconds
+  max_requests: 10
+backends:
+  in_memory:
+    expiration_time: 10 # seconds
+    eviction_time: 15 # seconds
+  redis:
+    addr: "redis:6379"
+    password: "some-hard-pass"
+    db: 0
 ```
 
 - The `store` key is responsible for storage type will be used. Possible options: `in_memoty`, `redis`, `etcd`.

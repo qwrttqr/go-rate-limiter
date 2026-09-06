@@ -1,27 +1,26 @@
 package algos
 
 import (
+	"context"
+	"fmt"
 	"net/http"
 	"qwrttqr-rate-limiter/core/server/internal/config"
 	"qwrttqr-rate-limiter/core/server/internal/interfaces"
 	"qwrttqr-rate-limiter/core/server/internal/utils"
 	"sync"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 )
 
-type FixedWindowLimiter struct {
-	WindowSize   int64
-	MaxRequests  int64
-	StorageType  string
-	limitingHook func(key string) bool
-	Cache        interfaces.Cache
-	Now          func() int64
+type FixedWindowStore interface {
+	CheckAndIncrement(ctx context.Context, key string, windowStart, windowSize, maxRequests int64) (bool, error)
 }
-
-type FixedWindowState struct {
-	mu           sync.Mutex
-	Count        int64
-	StoredWindow int64
+type FixedWindowLimiter struct {
+	WindowSize  int64
+	MaxRequests int64
+	Store       FixedWindowStore
+	Now         func() int64
 }
 
 func (fwl *FixedWindowLimiter) Configure() {
@@ -30,38 +29,21 @@ func (fwl *FixedWindowLimiter) Configure() {
 			return time.Now().Unix()
 		}
 	}
-	switch fwl.StorageType {
-	case "in_memory":
-		fwl.limitingHook = func(key string) bool {
-
-			currentTime := fwl.Now()
-			currentWindow := currentTime / fwl.WindowSize
-			windowStart := currentWindow * fwl.WindowSize
-			val := fwl.Cache.LoadOrStore(key, &FixedWindowState{
-				Count:        0,
-				StoredWindow: windowStart,
-			})
-
-			window := val.(*FixedWindowState)
-
-			window.mu.Lock()
-			defer window.mu.Unlock()
-
-			if window.StoredWindow < windowStart {
-				window.Count = 0
-				window.StoredWindow = windowStart
-			}
-			if window.Count < fwl.MaxRequests {
-				window.Count++
-				return true
-			}
-			return false
-		}
-	}
 }
 
 func ValidateFixedWindowConfig(cfg config.Configuration) error {
 	return utils.CheckRequiredFields(cfg.AlgoSettings, []string{"window_size", "max_requests"})
+}
+
+func NewFixedWindowStore(cfg config.Configuration, cacheInstance interfaces.Cache, redisClient *redis.Client) (FixedWindowStore, error) {
+	switch cfg.Store {
+	case "in_memory":
+		return &InMemoryFixedWindowStore{Cache: cacheInstance}, nil
+	case "redis":
+		return &RedisFixedWindowStore{Client: redisClient}, nil
+	default:
+		return nil, fmt.Errorf("unsupported store: %s", cfg.Store)
+	}
 }
 
 func (fwl *FixedWindowLimiter) LimitHTTP(w http.ResponseWriter, r *http.Request) {
@@ -70,9 +52,81 @@ func (fwl *FixedWindowLimiter) LimitHTTP(w http.ResponseWriter, r *http.Request)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	allowed := fwl.limitingHook(body.ClientKey)
+	currentWindow := fwl.Now() / fwl.WindowSize
+	windowStart := currentWindow * fwl.WindowSize
+
+	allowed, err := fwl.Store.CheckAndIncrement(r.Context(), body.ClientKey, windowStart, fwl.WindowSize, fwl.MaxRequests)
+	if err != nil {
+		http.Error(w, "rate limiter error", http.StatusInternalServerError)
+		return
+	}
 	if !allowed {
 		http.Error(w, "rate limit exceeded", http.StatusTooManyRequests)
 		return
 	}
+}
+
+type InMemoryFixedWindowStore struct {
+	Cache interfaces.Cache
+}
+type FixedWindowState struct {
+	mu           sync.Mutex
+	Count        int64
+	StoredWindow int64
+}
+
+func (s *InMemoryFixedWindowStore) CheckAndIncrement(ctx context.Context, key string, windowStart, windowSize, maxRequests int64) (bool, error) {
+	val := s.Cache.LoadOrStore(key, &FixedWindowState{
+		Count:        0,
+		StoredWindow: windowStart,
+	})
+
+	window := val.(*FixedWindowState)
+
+	window.mu.Lock()
+	defer window.mu.Unlock()
+
+	if window.StoredWindow < windowStart {
+		window.Count = 0
+		window.StoredWindow = windowStart
+	}
+	if window.Count < maxRequests {
+		window.Count++
+		return true, nil
+	}
+	return false, nil
+}
+
+type RedisFixedWindowStore struct {
+	Client *redis.Client
+}
+
+var fixedWindowScript = redis.NewScript(`
+local stored = redis.call("HMGET", KEYS[1], "window", "count")
+local storedWindow = tonumber(stored[1])
+local count = tonumber(stored[2]) or 0
+local windowStart = tonumber(ARGV[1])
+local windowSize = tonumber(ARGV[2])
+local maxRequests = tonumber(ARGV[3])
+if storedWindow == nil or storedWindow < windowStart then
+	count = 0
+	storedWindow = windowStart
+end
+
+if count < maxRequests then
+	count = count + 1
+	redis.call("HMSET", KEYS[1], "window", storedWindow, "count", count)
+	redis.call("EXPIRE", KEYS[1], windowSize)
+	return 1
+else 
+	return 0
+end
+`)
+
+func (s *RedisFixedWindowStore) CheckAndIncrement(ctx context.Context, key string, windowStart, windowSize, maxRequests int64) (bool, error) {
+	res, err := fixedWindowScript.Run(ctx, s.Client, []string{key}, windowStart, windowSize, maxRequests).Int()
+	if err != nil {
+		return false, err
+	}
+	return res == 1, nil
 }

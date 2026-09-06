@@ -1,6 +1,7 @@
 package algos
 
 import (
+	"context"
 	"testing"
 )
 
@@ -43,18 +44,21 @@ func TestTokenBucket_logic(t *testing.T) {
 				tokensRequired = *tt.tokensRequired
 			}
 			cache := newMockCache()
+			store := &InMemoryBucketStore{Cache: cache}
 			tb := &TokenBucketLimiter{
-				Capacity:    tt.capacity,
-				Rate:        tt.rate,
-				Cache:       cache,
-				StorageType: "in_memory",
+				Capacity: tt.capacity,
+				Rate:     tt.rate,
+				Store:    store,
 			}
 			tb.Configure()
 
 			calls := max(tt.disallowOn, 0)
 
 			for i := 0; i <= calls; i++ {
-				allowed := tb.limitingHook(tt.key, tokensRequired)
+				allowed, err := tb.Store.TakeToken(context.Background(), tt.key, tb.Rate, tokensRequired, tb.Now(), tb.Capacity)
+				if err != nil {
+					t.Fatalf("call %d: unexpected error: %v", i, err)
+				}
 				wantAllowed := !(tt.disallowOn >= 0 && i == tt.disallowOn)
 				if allowed != wantAllowed {
 					t.Errorf("call %d: allowed=%v, want %v", i, allowed, wantAllowed)
@@ -67,39 +71,58 @@ func TestTokenBucket_logic(t *testing.T) {
 func TestTokenBucket_refill(t *testing.T) {
 	var fakeNow int64 = 1000
 	cache := newMockCache()
+	store := &InMemoryBucketStore{Cache: cache}
 	tb := &TokenBucketLimiter{
-		Capacity:    10,
-		Rate:        1,
-		Cache:       cache,
-		StorageType: "in_memory",
-		Now:         func() int64 { return fakeNow },
+		Capacity: 10,
+		Rate:     1,
+		Store:    store,
+		Now:      func() int64 { return fakeNow },
 	}
 	tb.Configure()
 
+	ctx := context.Background()
+	take := func(tokens int64) (bool, error) {
+		return tb.Store.TakeToken(ctx, "user-123", tb.Rate, tokens, tb.Now(), tb.Capacity)
+	}
+
 	for i := range 10 {
-		if !tb.limitingHook("user-123", 1) {
+		allowed, err := take(1)
+		if err != nil {
+			t.Fatalf("call %d unexpected error: %v", i, err)
+		}
+		if !allowed {
 			t.Fatalf("call %d unexpected disallow while draining", i)
 		}
 	}
-	if tb.limitingHook("user-123", 1) {
+	if allowed, err := take(1); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	} else if allowed {
 		t.Fatal("expected disallowed when bucket is empty")
 	}
 
 	fakeNow += 5
 
-	if !tb.limitingHook("user-123", 5) {
+	if allowed, err := take(5); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	} else if !allowed {
 		t.Fatal("expected allowed after refill of 5 tokens")
 	}
 
 	fakeNow += 5
 
 	for i := range 5 {
-		if !tb.limitingHook("user-123", 1) {
+		allowed, err := take(1)
+		if err != nil {
+			t.Fatalf("call %d unexpected error: %v", i, err)
+		}
+		if !allowed {
 			t.Fatalf("call %d unexpected disallow while draining", i)
 		}
 	}
 
-	if tb.limitingHook("user-123", 5) {
+	if allowed, err := take(5); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	} else if allowed {
 		t.Fatal("expected disallowed when bucket is empty")
 	}
 }

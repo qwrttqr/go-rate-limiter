@@ -7,6 +7,8 @@ import (
 	"qwrttqr-rate-limiter/core/server/internal/config"
 	"qwrttqr-rate-limiter/core/server/internal/interfaces"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 )
 
 func NewRateLimiter() (interfaces.RateLimiterInterface, error) {
@@ -15,40 +17,48 @@ func NewRateLimiter() (interfaces.RateLimiterInterface, error) {
 		return nil, fmt.Errorf("failed to read config: %w", err)
 	}
 
-	// 1. Declare the pointer OUTSIDE the if-block scope so it propagates down
 	var cacheInstance *cache.InMemoryCache
-
-	// 2. Initialize it only if in_memory storage is requested
-	if cfg.Store == "in_memory" {
+	var redisClient *redis.Client
+	switch cfg.Store {
+	case "in_memory":
 		cacheInstance = cache.NewCache(
-			*cfg.CacheSettings.ExpirationTime,
-			time.Duration(*cfg.CacheSettings.EvictionTime)*time.Second,
+			cfg.Backends.InMemory.ExpirationTime,
+			time.Duration(cfg.Backends.InMemory.EvictionTime)*time.Second,
 		)
+	case "redis":
+		redisClient = redis.NewClient(&redis.Options{
+			Addr:     cfg.Backends.Redis.Addr,
+			Password: cfg.Backends.Redis.Password,
+			DB:       cfg.Backends.Redis.Db,
+		})
 	}
-
 	switch cfg.UsedAlgo {
 	case "token_bucket":
 		if err := algos.ValidateTokenBucketConfig(cfg); err != nil {
 			return nil, err
 		}
-
+		store, err := algos.NewTokenBucketStore(cfg, cacheInstance, redisClient)
+		if err != nil {
+			return nil, err
+		}
 		limiter := &algos.TokenBucketLimiter{
-			Capacity:    *cfg.AlgoSettings.Capacity,
-			Rate:        *cfg.AlgoSettings.Rate,
-			StorageType: cfg.Store,
-			Cache:       cacheInstance,
+			Capacity: *cfg.AlgoSettings.Capacity,
+			Rate:     *cfg.AlgoSettings.Rate,
+			Store:    store,
 		}
 		return limiter, nil
-
 	case "fixed_window":
 		if err := algos.ValidateFixedWindowConfig(cfg); err != nil {
+			return nil, err
+		}
+		store, err := algos.NewFixedWindowStore(cfg, cacheInstance, redisClient)
+		if err != nil {
 			return nil, err
 		}
 		limiter := &algos.FixedWindowLimiter{
 			MaxRequests: *cfg.AlgoSettings.MaxRequests,
 			WindowSize:  *cfg.AlgoSettings.WindowSize,
-			StorageType: cfg.Store,
-			Cache:       cacheInstance,
+			Store:       store,
 		}
 		return limiter, nil
 
@@ -56,11 +66,14 @@ func NewRateLimiter() (interfaces.RateLimiterInterface, error) {
 		if err := algos.ValidateRollingWindowConfiguration(cfg); err != nil {
 			return nil, err
 		}
+		store, err := algos.NewRollingWindowStore(cfg, cacheInstance, redisClient)
+		if err != nil {
+			return nil, err
+		}
 		limiter := &algos.RollingWindowLimiter{
 			MaxRequests: *cfg.AlgoSettings.MaxRequests,
 			WindowSize:  *cfg.AlgoSettings.WindowSize,
-			StorageType: cfg.Store,
-			Cache:       cacheInstance,
+			Store:       store,
 		}
 		return limiter, nil
 

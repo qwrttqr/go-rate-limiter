@@ -7,28 +7,34 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-type Root struct {
-	Configuration Configuration `yaml:"configuration"`
-}
 type Configuration struct {
-	UsedAlgo      string        `yaml:"use_algo"`
-	Store         string        `yaml:"store"`
-	AlgoSettings  AlgoSettings  `yaml:"algo_settings"`
-	CacheSettings CacheSettings `yaml:"cache_settings"`
+	UsedAlgo     string       `yaml:"use_algo"`
+	Store        string       `yaml:"store"`
+	AlgoSettings AlgoSettings `yaml:"algo_settings"`
+	Backends     Backends     `yaml:"backends"`
 }
 
+type Backends struct {
+	InMemory InMemoryBackendSettings `yaml:"in_memory"`
+	Redis    RedisBackendSettings    `yaml:"redis"`
+}
+
+type InMemoryBackendSettings struct {
+	ExpirationTime int64 `yaml:"expiration_time"`
+	EvictionTime   int64 `yaml:"eviction_time"`
+}
+
+type RedisBackendSettings struct {
+	Addr     string `yaml:"addr"`
+	Password string `yaml:"password"`
+	Db       int    `yaml:"db"`
+}
 type AlgoSettings struct {
 	Capacity    *int64   `yaml:"capacity"`
 	Rate        *float64 `yaml:"rate"`
 	WindowSize  *int64   `yaml:"window_size"`
 	MaxRequests *int64   `yaml:"max_requests"`
-	TTL         *string  `yaml:"ttl"`
 	MinInterval *string  `yaml:"min_interval"`
-}
-
-type CacheSettings struct {
-	ExpirationTime *int64 `yaml:"expiration_time"`
-	EvictionTime   *int64 `yaml:"eviction_time"`
 }
 
 func ReadConfig() (Configuration, error) {
@@ -36,9 +42,9 @@ func ReadConfig() (Configuration, error) {
 	if err != nil {
 		return Configuration{}, fmt.Errorf("error reading configuration: %s", err.Error())
 	}
-	var root Root
-	if err := yaml.Unmarshal(data, &root); err != nil {
+	var config Configuration
+	if err := yaml.Unmarshal(data, &config); err != nil {
 		return Configuration{}, fmt.Errorf("parsing config yaml: %w", err)
 	}
-	return root.Configuration, nil
+	return config, nil
 }
