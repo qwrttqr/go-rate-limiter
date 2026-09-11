@@ -12,7 +12,7 @@ import (
 )
 
 func NewRateLimiter() (interfaces.RateLimiterInterface, error) {
-	cfg, err := config.ReadConfig() // Good practice: Handle this error too
+	cfg, err := config.ReadConfig()
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config: %w", err)
 	}
@@ -22,7 +22,7 @@ func NewRateLimiter() (interfaces.RateLimiterInterface, error) {
 	switch cfg.Store {
 	case "in_memory":
 		cacheInstance = cache.NewCache(
-			cfg.Backends.InMemory.ExpirationTime,
+			cfg.Backends.InMemory.DefaultTtl,
 			time.Duration(cfg.Backends.InMemory.EvictionTime)*time.Second,
 		)
 	case "redis":

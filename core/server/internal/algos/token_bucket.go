@@ -40,7 +40,7 @@ func NewTokenBucketStore(cfg config.Configuration, cacheInstance interfaces.Cach
 	case "in_memory":
 		return &InMemoryBucketStore{Cache: cacheInstance}, nil
 	case "redis":
-		return &RedisBucketStore{Client: redisClient}, nil
+		return &RedisBucketStore{Client: redisClient, DefaultTtl: cfg.Backends.Redis.DefaultTtl}, nil
 	default:
 		return nil, fmt.Errorf("unsupported store: %s", cfg.Store)
 	}
@@ -106,7 +106,8 @@ func (s *InMemoryBucketStore) TakeToken(ctx context.Context, key string, rate fl
 }
 
 type RedisBucketStore struct {
-	Client *redis.Client
+	Client     *redis.Client
+	DefaultTtl int64
 }
 
 var tokenBucketScript = redis.NewScript(`
@@ -114,6 +115,7 @@ local capacity = tonumber(ARGV[1])
 local rate = tonumber(ARGV[2])
 local tokensRequired = tonumber(ARGV[3])
 local now = tonumber(ARGV[4])
+local ttl = tonumber(ARGV[5])
 
 local stored = redis.call("HMGET", KEYS[1], "tokens", "last_refill")
 local tokens = tonumber(stored[1])
@@ -131,6 +133,7 @@ local newTokens = math.min(capacity, tokens + refill)
 if newTokens >= tokensRequired then
 	newTokens = newTokens - tokensRequired
 	redis.call("HMSET", KEYS[1], "tokens", newTokens, "last_refill", now)
+	redis.call("EXPIRE", KEYS[1], ttl)
 	return 1
 else 
 	return 0
@@ -138,7 +141,7 @@ end
 `)
 
 func (s *RedisBucketStore) TakeToken(ctx context.Context, key string, rate float64, tokensRequired, now, capacity int64) (bool, error) {
-	res, err := tokenBucketScript.Run(ctx, s.Client, []string{key}, capacity, rate, tokensRequired, now).Int()
+	res, err := tokenBucketScript.Run(ctx, s.Client, []string{key}, capacity, rate, tokensRequired, now, s.DefaultTtl).Int()
 	if err != nil {
 		return false, err
 	}

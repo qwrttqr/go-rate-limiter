@@ -20,14 +20,15 @@ type Backends struct {
 }
 
 type InMemoryBackendSettings struct {
-	ExpirationTime int64 `yaml:"expiration_time"`
-	EvictionTime   int64 `yaml:"eviction_time"`
+	DefaultTtl   int64 `yaml:"default_ttl"`
+	EvictionTime int64 `yaml:"eviction_time"`
 }
 
 type RedisBackendSettings struct {
-	Addr     string `yaml:"addr"`
-	Password string `yaml:"password"`
-	Db       int    `yaml:"db"`
+	Addr       string `yaml:"addr"`
+	Password   string `yaml:"password"`
+	Db         int    `yaml:"db"`
+	DefaultTtl int64  `yaml:"default_ttl"`
 }
 type AlgoSettings struct {
 	Capacity    *int64   `yaml:"capacity"`
