@@ -17,7 +17,7 @@ func main() {
 	}
 	rateLimiter.Configure()
 
-	http.HandleFunc("/limit", rateLimiter.LimitHTTP)
+	http.HandleFunc("/limitHttp", rateLimiter.LimitHTTP)
 
 	addr := ":8080"
 	log.Printf("listening on %s", addr)
