@@ -1,35 +1,35 @@
 package test
 
 import (
-	"fmt"
 	"math/rand/v2"
 )
 
-
 type ClientConfig struct {
 	ClientCount       int
-	ClientMinRequests int
-	ClientMaxRequests int
+	ClientRequestsMin int
+	ClientRequestsMax int
 	ClientCooldownMin int
 	ClientCooldownMax int
 }
 
 type Client struct {
-	ClientId           string
+	ClientId           int
 	ClientRequestsMake int
-	ClientCoolDownTime int
+	ClientCooldownTime int
 }
 
 func CreateClients(
 	ClientCount int,
-	ClientMinRequests int,
-	ClientMaxRequests int,
+	ClientRequestsMin int,
+	ClientRequestsMax int,
 	ClientCooldownMin int,
 	ClientCooldownMax int,
 ) []Client {
 	clients := make([]Client, 0, ClientCount)
-	for i := 0; i < ClientCount; i++ {
-
-		clients = append(clients, &Client{ClientId: i, ClientRequestsMake: })
+	for i := range ClientCount {
+		clientRequestMake := rand.IntN(ClientRequestsMax-ClientRequestsMin+1) + ClientRequestsMin
+		clientCoolDown := rand.IntN(ClientCooldownMax-ClientCooldownMin+1) + ClientRequestsMin
+		clients = append(clients, Client{ClientId: i, ClientRequestsMake: clientRequestMake, ClientCooldownTime: clientCoolDown})
 	}
+	return clients
 }

@@ -1,15 +1,14 @@
-configuration:
-  store: "in_memory"
-  use_algo: "rolling_window"
-  algo_settings:
-    window_size: 100 # seconds
-    max_requests: 10
-  backends:
-    in_memory:
-      default_ttl: 10 # seconds
-      eviction_time: 15 # seconds
-    redis:
-      addr: "redis:6379"
-      password: "m1re1di$$sss"
-      db: 0
-      default_ttl: 1000
+store: "in_memory"
+use_algo: "rolling_window"
+algo_settings:
+  window_size: 100 # seconds
+  max_requests: 10
+backends:
+  in_memory:
+    default_ttl: 10 # seconds
+    eviction_time: 15 # seconds
+  redis:
+    addr: "redis:6379"
+    password: "m1re1di$$sss"
+    db: 0
+    default_ttl: 1000

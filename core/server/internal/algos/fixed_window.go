@@ -7,6 +7,7 @@ import (
 	"qwrttqr-rate-limiter/core/server/internal/config"
 	"qwrttqr-rate-limiter/core/server/internal/interfaces"
 	"qwrttqr-rate-limiter/core/server/internal/utils"
+	"strconv"
 	"sync"
 	"time"
 
@@ -14,7 +15,7 @@ import (
 )
 
 type FixedWindowStore interface {
-	CheckAndIncrement(ctx context.Context, key string, windowStart, windowSize, maxRequests int64) (bool, error)
+	CheckAndIncrement(ctx context.Context, key string, windowStart, windowSize, maxRequests int64, now int64) (bool, int64, error)
 }
 type FixedWindowLimiter struct {
 	WindowSize  int64
@@ -52,15 +53,17 @@ func (fwl *FixedWindowLimiter) LimitHTTP(w http.ResponseWriter, r *http.Request)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	currentWindow := fwl.Now() / fwl.WindowSize
+	now := fwl.Now()
+	currentWindow := now / fwl.WindowSize
 	windowStart := currentWindow * fwl.WindowSize
 
-	allowed, err := fwl.Store.CheckAndIncrement(r.Context(), body.ClientKey, windowStart, fwl.WindowSize, fwl.MaxRequests)
+	allowed, retryAfter, err := fwl.Store.CheckAndIncrement(r.Context(), body.ClientKey, windowStart, fwl.WindowSize, fwl.MaxRequests, now)
 	if err != nil {
 		http.Error(w, "rate limiter error", http.StatusInternalServerError)
 		return
 	}
 	if !allowed {
+		w.Header().Set("Retry-After", strconv.FormatInt(retryAfter, 10))
 		http.Error(w, "rate limit exceeded", http.StatusTooManyRequests)
 		return
 	}
@@ -75,12 +78,18 @@ type FixedWindowState struct {
 	StoredWindow int64
 }
 
-func (s *InMemoryFixedWindowStore) CheckAndIncrement(ctx context.Context, key string, windowStart, windowSize, maxRequests int64) (bool, error) {
+func (s *InMemoryFixedWindowStore) CheckAndIncrement(
+	ctx context.Context, key string,
+	windowStart,
+	windowSize,
+	maxRequests,
+	now int64,
+) (bool, int64, error) {
+
 	val := s.Cache.LoadOrStore(key, &FixedWindowState{
 		Count:        0,
 		StoredWindow: windowStart,
 	})
-
 	window := val.(*FixedWindowState)
 
 	window.mu.Lock()
@@ -92,9 +101,15 @@ func (s *InMemoryFixedWindowStore) CheckAndIncrement(ctx context.Context, key st
 	}
 	if window.Count < maxRequests {
 		window.Count++
-		return true, nil
+		return true, 0, nil
 	}
-	return false, nil
+
+	timeToNextWindow := (window.StoredWindow + windowSize) - now
+	if timeToNextWindow < 0 {
+		timeToNextWindow = 0
+	}
+
+	return false, timeToNextWindow, nil
 }
 
 type RedisFixedWindowStore struct {
@@ -108,25 +123,29 @@ local count = tonumber(stored[2]) or 0
 local windowStart = tonumber(ARGV[1])
 local windowSize = tonumber(ARGV[2])
 local maxRequests = tonumber(ARGV[3])
+local now = tonumber(ARGV[4])
+
 if storedWindow == nil or storedWindow < windowStart then
 	count = 0
 	storedWindow = windowStart
 end
-
+local retryAfter = (windowStart + windowSize) - now 
 if count < maxRequests then
 	count = count + 1
 	redis.call("HMSET", KEYS[1], "window", storedWindow, "count", count)
 	redis.call("EXPIRE", KEYS[1], windowSize)
-	return 1
+	return {1, 0}
 else 
-	return 0
+	return {0, retryAfter}
 end
 `)
 
-func (s *RedisFixedWindowStore) CheckAndIncrement(ctx context.Context, key string, windowStart, windowSize, maxRequests int64) (bool, error) {
-	res, err := fixedWindowScript.Run(ctx, s.Client, []string{key}, windowStart, windowSize, maxRequests).Int()
+func (s *RedisFixedWindowStore) CheckAndIncrement(ctx context.Context, key string, windowStart, windowSize, maxRequests, now int64) (bool, int64, error) {
+	res, err := fixedWindowScript.Run(ctx, s.Client, []string{key}, windowStart, windowSize, maxRequests, now).Int64Slice()
 	if err != nil {
-		return false, err
+		return false, 0, err
 	}
-	return res == 1, nil
+	allowed := res[0] == 1
+	retryAfter := res[1]
+	return allowed, retryAfter, nil
 }
