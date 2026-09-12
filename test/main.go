@@ -1,4 +1,4 @@
-package test
+package main
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 )
 
 func main() {
-	var cfg ClientConfig
+	var cfg TestingConfig
 
 	args := os.Args[1:]
 
@@ -34,9 +34,11 @@ func main() {
 			cfg.ClientCooldownMax = valueInt
 		case "-clients_min_cooldown", "--clients_min_cooldown":
 			cfg.ClientCooldownMin = valueInt
+		case "-iterations", "--iterations":
+			cfg.Iterations = valueInt
 		}
 	}
 	fmt.Printf("Parsed Configuration: %+v\n", cfg)
 	fmt.Println("Proceeding tests....")
-
+	Run(cfg)
 }
