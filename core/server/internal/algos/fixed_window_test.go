@@ -42,7 +42,7 @@ func TestFixedWindow_logic(t *testing.T) {
 				currentWindow := currentTime / fw.WindowSize
 				windowStart := currentWindow * fw.WindowSize
 
-				allowed, err := fw.Store.CheckAndIncrement(context.Background(), tt.key, windowStart, fw.WindowSize, fw.MaxRequests)
+				allowed, _, err := fw.Store.CheckAndIncrement(context.Background(), tt.key, windowStart, fw.WindowSize, fw.MaxRequests, 1000)
 				if err != nil {
 					t.Fatalf("call %d: unexpected error: %v", i, err)
 				}
@@ -68,15 +68,15 @@ func TestFixedWindow_new_window(t *testing.T) {
 	fw.Configure()
 
 	ctx := context.Background()
-	hit := func() (bool, error) {
+	hit := func() (bool, int64, error) {
 		currentTime := fw.Now()
 		currentWindow := currentTime / fw.WindowSize
 		windowStart := currentWindow * fw.WindowSize
-		return fw.Store.CheckAndIncrement(ctx, "user-123", windowStart, fw.WindowSize, fw.MaxRequests)
+		return fw.Store.CheckAndIncrement(ctx, "user-123", windowStart, fw.WindowSize, fw.MaxRequests, 1000)
 	}
 
 	for i := range 5 {
-		allowed, err := hit()
+		allowed, _, err := hit()
 		if err != nil {
 			t.Fatalf("call %d unexpected error: %v", i, err)
 		}
@@ -84,7 +84,7 @@ func TestFixedWindow_new_window(t *testing.T) {
 			t.Fatalf("call %d unexpected disallow while draining", i)
 		}
 	}
-	if allowed, err := hit(); err != nil {
+	if allowed, _, err := hit(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	} else if allowed {
 		t.Fatal("expected disallowed when max requests is drained")
@@ -93,7 +93,7 @@ func TestFixedWindow_new_window(t *testing.T) {
 	fakeNow += 10 // moves into the next 10s-aligned bucket entirely
 
 	for i := range 5 {
-		allowed, err := hit()
+		allowed, _, err := hit()
 		if err != nil {
 			t.Fatalf("call %d unexpected error: %v", i, err)
 		}
@@ -116,15 +116,15 @@ func TestFixedWindow_same_window(t *testing.T) {
 	fw.Configure()
 
 	ctx := context.Background()
-	hit := func() (bool, error) {
+	hit := func() (bool, int64, error) {
 		currentTime := fw.Now()
 		currentWindow := currentTime / fw.WindowSize
 		windowStart := currentWindow * fw.WindowSize
-		return fw.Store.CheckAndIncrement(ctx, "user-123", windowStart, fw.WindowSize, fw.MaxRequests)
+		return fw.Store.CheckAndIncrement(ctx, "user-123", windowStart, fw.WindowSize, fw.MaxRequests, 1000)
 	}
 
 	for i := range 5 {
-		allowed, err := hit()
+		allowed, _, err := hit()
 		if err != nil {
 			t.Fatalf("call %d unexpected error: %v", i, err)
 		}
@@ -132,7 +132,7 @@ func TestFixedWindow_same_window(t *testing.T) {
 			t.Fatalf("call %d unexpected disallow while draining", i)
 		}
 	}
-	if allowed, err := hit(); err != nil {
+	if allowed, _, err := hit(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	} else if allowed {
 		t.Fatal("expected disallowed when max requests is drained")
@@ -141,7 +141,7 @@ func TestFixedWindow_same_window(t *testing.T) {
 	fakeNow += 1 // still within the same 10s-aligned bucket (1000-1009)
 
 	for i := range 5 {
-		allowed, err := hit()
+		allowed, _, err := hit()
 		if err != nil {
 			t.Fatalf("call %d unexpected error: %v", i, err)
 		}

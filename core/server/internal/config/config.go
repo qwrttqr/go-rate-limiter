@@ -47,5 +47,12 @@ func ReadConfig() (Configuration, error) {
 	if err := yaml.Unmarshal(data, &config); err != nil {
 		return Configuration{}, fmt.Errorf("parsing config yaml: %w", err)
 	}
+	applyEnvOverrides(&config)
 	return config, nil
+}
+
+func applyEnvOverrides(config *Configuration) {
+	if v := os.Getenv("STORE_BACKEND"); v != "" {
+		config.Store = v
+	}
 }

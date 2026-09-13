@@ -3,10 +3,12 @@ package algos
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/http"
 	"qwrttqr-rate-limiter/core/server/internal/config"
 	"qwrttqr-rate-limiter/core/server/internal/interfaces"
 	"qwrttqr-rate-limiter/core/server/internal/utils"
+	"strconv"
 	"sync"
 	"time"
 
@@ -14,7 +16,7 @@ import (
 )
 
 type TokenBucketStore interface {
-	TakeToken(ctx context.Context, key string, rate float64, tokensRequired, now, capacity int64) (bool, error)
+	TakeToken(ctx context.Context, key string, rate float64, tokensRequired, now, capacity int64) (bool, int64, error)
 }
 type TokenBucketLimiter struct {
 	Capacity int64
@@ -56,12 +58,13 @@ func (tbl *TokenBucketLimiter) LimitHTTP(w http.ResponseWriter, r *http.Request)
 	if body.RequiredTokens != nil {
 		requiredTokens = *body.RequiredTokens
 	}
-	allowed, err := tbl.Store.TakeToken(r.Context(), body.ClientKey, tbl.Rate, requiredTokens, tbl.Now(), tbl.Capacity)
+	allowed, retryAfter, err := tbl.Store.TakeToken(r.Context(), body.ClientKey, tbl.Rate, requiredTokens, tbl.Now(), tbl.Capacity)
 	if err != nil {
 		http.Error(w, "rate limiter error", http.StatusInternalServerError)
 		return
 	}
 	if !allowed {
+		w.Header().Set("Retry-After", strconv.FormatInt(retryAfter, 10))
 		http.Error(w, "rate limit exceeded", http.StatusTooManyRequests)
 		return
 	}
@@ -77,7 +80,7 @@ type BucketState struct {
 	LastRefill int64
 }
 
-func (s *InMemoryBucketStore) TakeToken(ctx context.Context, key string, rate float64, tokensRequired, now, capacity int64) (bool, error) {
+func (s *InMemoryBucketStore) TakeToken(ctx context.Context, key string, rate float64, tokensRequired, now, capacity int64) (bool, int64, error) {
 	val := s.Cache.LoadOrStore(key, &BucketState{
 		Tokens:     capacity,
 		LastRefill: now,
@@ -99,10 +102,10 @@ func (s *InMemoryBucketStore) TakeToken(ctx context.Context, key string, rate fl
 	if newTokens >= tokensRequired {
 		bucket.Tokens = newTokens - tokensRequired
 		bucket.LastRefill = now
-		return true, nil
+		return true, 0, nil
 	}
-
-	return false, nil
+	retryAfter := math.Ceil((float64(tokensRequired) - float64(newTokens)) / rate)
+	return false, int64(retryAfter), nil
 }
 
 type RedisBucketStore struct {
@@ -122,8 +125,8 @@ local tokens = tonumber(stored[1])
 local lastRefill = tonumber(stored[2])
 
 if tokens == nil then
-	tokens = capacity
-	lastRefill = now
+    tokens = capacity
+    lastRefill = now
 end
 
 local timePassed = now - lastRefill
@@ -131,19 +134,24 @@ local refill = timePassed * rate
 local newTokens = math.min(capacity, tokens + refill)
 
 if newTokens >= tokensRequired then
-	newTokens = newTokens - tokensRequired
-	redis.call("HMSET", KEYS[1], "tokens", newTokens, "last_refill", now)
-	redis.call("EXPIRE", KEYS[1], ttl)
-	return 1
-else 
-	return 0
+    newTokens = newTokens - tokensRequired
+    redis.call("HMSET", KEYS[1], "tokens", newTokens, "last_refill", now)
+    redis.call("EXPIRE", KEYS[1], ttl)
+    return {1, 0}
+else
+    local retryAfter = math.ceil((tokensRequired - newTokens) / rate)
+    redis.call("HMSET", KEYS[1], "tokens", newTokens, "last_refill", now)
+    redis.call("EXPIRE", KEYS[1], ttl)
+    return {0, retryAfter}
 end
 `)
 
-func (s *RedisBucketStore) TakeToken(ctx context.Context, key string, rate float64, tokensRequired, now, capacity int64) (bool, error) {
-	res, err := tokenBucketScript.Run(ctx, s.Client, []string{key}, capacity, rate, tokensRequired, now, s.DefaultTtl).Int()
+func (s *RedisBucketStore) TakeToken(ctx context.Context, key string, rate float64, tokensRequired, now, capacity int64) (bool, int64, error) {
+	res, err := tokenBucketScript.Run(ctx, s.Client, []string{key}, capacity, rate, tokensRequired, now, s.DefaultTtl).Int64Slice()
 	if err != nil {
-		return false, err
+		return false, 0, err
 	}
-	return res == 1, nil
+	allowed := res[0] == 1
+	retryAfter := res[1]
+	return allowed, retryAfter, nil
 }

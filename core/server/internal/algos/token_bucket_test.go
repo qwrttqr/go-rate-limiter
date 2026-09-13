@@ -55,7 +55,7 @@ func TestTokenBucket_logic(t *testing.T) {
 			calls := max(tt.disallowOn, 0)
 
 			for i := 0; i <= calls; i++ {
-				allowed, err := tb.Store.TakeToken(context.Background(), tt.key, tb.Rate, tokensRequired, tb.Now(), tb.Capacity)
+				allowed, _, err := tb.Store.TakeToken(context.Background(), tt.key, tb.Rate, tokensRequired, tb.Now(), tb.Capacity)
 				if err != nil {
 					t.Fatalf("call %d: unexpected error: %v", i, err)
 				}
@@ -81,12 +81,12 @@ func TestTokenBucket_refill(t *testing.T) {
 	tb.Configure()
 
 	ctx := context.Background()
-	take := func(tokens int64) (bool, error) {
+	take := func(tokens int64) (bool, int64, error) {
 		return tb.Store.TakeToken(ctx, "user-123", tb.Rate, tokens, tb.Now(), tb.Capacity)
 	}
 
 	for i := range 10 {
-		allowed, err := take(1)
+		allowed, _, err := take(1)
 		if err != nil {
 			t.Fatalf("call %d unexpected error: %v", i, err)
 		}
@@ -94,7 +94,7 @@ func TestTokenBucket_refill(t *testing.T) {
 			t.Fatalf("call %d unexpected disallow while draining", i)
 		}
 	}
-	if allowed, err := take(1); err != nil {
+	if allowed, _, err := take(1); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	} else if allowed {
 		t.Fatal("expected disallowed when bucket is empty")
@@ -102,7 +102,7 @@ func TestTokenBucket_refill(t *testing.T) {
 
 	fakeNow += 5
 
-	if allowed, err := take(5); err != nil {
+	if allowed, _, err := take(5); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	} else if !allowed {
 		t.Fatal("expected allowed after refill of 5 tokens")
@@ -111,7 +111,7 @@ func TestTokenBucket_refill(t *testing.T) {
 	fakeNow += 5
 
 	for i := range 5 {
-		allowed, err := take(1)
+		allowed, _, err := take(1)
 		if err != nil {
 			t.Fatalf("call %d unexpected error: %v", i, err)
 		}
@@ -120,7 +120,7 @@ func TestTokenBucket_refill(t *testing.T) {
 		}
 	}
 
-	if allowed, err := take(5); err != nil {
+	if allowed, _, err := take(5); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	} else if allowed {
 		t.Fatal("expected disallowed when bucket is empty")
