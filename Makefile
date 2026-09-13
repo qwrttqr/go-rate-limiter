@@ -14,38 +14,33 @@ help:
 
 test_in_memory:
 	@echo "Configuring engine for 'in_memory' processing..."
-	@sed -i 's/store: ".*"/store: "in_memory"/' config.yaml
-	@docker build -t temp . || (echo "Build failed no container was run"; exit 1)
-	@docker run -d --name temp-container -p 8080:8080 temp
-	@echo "Waiting for app environment to stabilize..."
-	@sleep 3
+	@docker build -t temp . || (echo "Build failed no container was run" && exit 1)
+	@docker run -d --name temp-container -e STORE_BACKEND=in_memory -p 8080:8080 temp
 	@echo "Executing benchmark execution matrix..."
-	go run test/main.go \
-		-clients $(CLIENTS) \
-		-iterations $(ITERATIONS) \
-		-clients_min_reqs $(MIN_REQS) \
-		-clients_max_reqs $(MAX_REQS) \
-		-clients_min_cooldown $(MIN_COOLDOWN) \
-		-clients_max_cooldown $(MAX_COOLDOWN)
-	@docker stop temp-container || true
-	@docker rm temp-container || true
+	-go run ./test \
+	   -clients $(CLIENTS) \
+	   -iterations $(ITERATIONS) \
+	   -clients_min_reqs $(MIN_REQS) \
+	   -clients_max_reqs $(MAX_REQS) \
+	   -clients_min_cooldown $(MIN_COOLDOWN) \
+	   -clients_max_cooldown $(MAX_COOLDOWN)
+	$(MAKE) clean
 
 test_redis:
 	@echo "Configuring engine for 'redis' processing..."
-	@sed -i 's/store: ".*"/store: "redis"/' config.yaml
-	@docker compose up --build -d || (echo "Docker compose build up failed"; docker compose down -v > /dev/null 2>&1 || true || exit 1)
+	@docker compose up --build -d || (echo "Docker compose build up failed" && docker compose down -v && exit 1)
 	@echo "Executing benchmark execution matrix..."
-	go run test/main.go \
-		-clients $(CLIENTS) \
-		-iterations $(ITERATIONS) \
-		-clients_min_reqs $(MIN_REQS) \
-		-clients_max_reqs $(MAX_REQS) \
-		-clients_min_cooldown $(MIN_COOLDOWN) \
-		-clients_max_cooldown $(MAX_COOLDOWN)
-	@docker compose down -v
+	-go run ./test \
+	   -clients $(CLIENTS) \
+	   -iterations $(ITERATIONS) \
+	   -clients_min_reqs $(MIN_REQS) \
+	   -clients_max_reqs $(MAX_REQS) \
+	   -clients_min_cooldown $(MIN_COOLDOWN) \
+	   -clients_max_cooldown $(MAX_COOLDOWN)
+	$(MAKE) clean
 
 clean:
 	go clean
-	@docker rm -f temp-container >/dev/null 2>&1 || true
-	@docker compose down -v >/dev/null 2>&1 || true
-	@docker image prune -f >/dev/null 2>&1 || true
+	-docker rm -f temp-container
+	-docker compose down -v
+	-docker image prune -f
