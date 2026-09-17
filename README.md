@@ -10,9 +10,9 @@ algorithms.
 
 ## What will be done
 
-1. Distributed state control via Redis, etcd.
+1. Distributed state control via etcd.
 2. Admin part with limiting statistic in PostgreSQL
-3. Ability to use this rate-limiter as middleware in your service and as standalone service
+3. Ability to use this rate-limiter as middleware in your service
 4. Support of gRPC
 
 ## How to use
