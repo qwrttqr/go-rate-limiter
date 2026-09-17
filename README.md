@@ -19,7 +19,7 @@ algorithms.
 
 ### Configuration
 
-The service contains one small config file:
+The service contains one small config file(create your own `config.yaml`):
 
 ```yaml
 store: "in_memory"
@@ -29,12 +29,13 @@ algo_settings:
   max_requests: 10
 backends:
   in_memory:
-    expiration_time: 10 # seconds
+    default_ttl: 10 # seconds
     eviction_time: 15 # seconds
   redis:
     addr: "redis:6379"
-    password: "some-hard-pass"
+    password: "pass"
     db: 0
+    default_ttl: 1000
 ```
 
 - The `store` key is responsible for storage type will be used. Possible options: `in_memoty`, `redis`, `etcd`.
@@ -44,7 +45,7 @@ backends:
 - `algo_settings` key is responsible for configuration for algo:
     - use `window_size` and `max_requests` for `rolling_window` and `fixed_window` algorithms.
     - use `capacity` and `rate` for `token_bucket` algo.
-
+  
 ### Build
 
 If you want to use rate-limiter as standalone service build it as container:
