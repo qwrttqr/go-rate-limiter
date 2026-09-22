@@ -5,13 +5,12 @@ import (
 	"qwrttqr-rate-limiter/core/server/internal/algos"
 	"qwrttqr-rate-limiter/core/server/internal/cache"
 	"qwrttqr-rate-limiter/core/server/internal/config"
-	"qwrttqr-rate-limiter/core/server/internal/interfaces"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 )
 
-func NewRateLimiter() (interfaces.RateLimiterInterface, error) {
+func NewRateLimiter() (algos.RateLimiterInterface, error) {
 	cfg, err := config.ReadConfig()
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config: %w", err)

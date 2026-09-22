@@ -4,9 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"qwrttqr-rate-limiter/core/server/internal/cache"
 	"qwrttqr-rate-limiter/core/server/internal/config"
-	"qwrttqr-rate-limiter/core/server/internal/interfaces"
-	"qwrttqr-rate-limiter/core/server/internal/utils"
 	"strconv"
 	"sync"
 	"time"
@@ -33,10 +32,10 @@ func (fwl *FixedWindowLimiter) Configure() {
 }
 
 func ValidateFixedWindowConfig(cfg config.Configuration) error {
-	return utils.CheckRequiredFields(cfg.AlgoSettings, []string{"window_size", "max_requests"})
+	return CheckRequiredFields(cfg.AlgoSettings, []string{"window_size", "max_requests"})
 }
 
-func NewFixedWindowStore(cfg config.Configuration, cacheInstance interfaces.Cache, redisClient *redis.Client) (FixedWindowStore, error) {
+func NewFixedWindowStore(cfg config.Configuration, cacheInstance cache.Cache, redisClient *redis.Client) (FixedWindowStore, error) {
 	switch cfg.Store {
 	case "in_memory":
 		return &InMemoryFixedWindowStore{Cache: cacheInstance}, nil
@@ -48,7 +47,7 @@ func NewFixedWindowStore(cfg config.Configuration, cacheInstance interfaces.Cach
 }
 
 func (fwl *FixedWindowLimiter) LimitHTTP(w http.ResponseWriter, r *http.Request) {
-	body, err := utils.ReadIncomingBody(r)
+	body, err := ReadIncomingBody(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -70,7 +69,7 @@ func (fwl *FixedWindowLimiter) LimitHTTP(w http.ResponseWriter, r *http.Request)
 }
 
 type InMemoryFixedWindowStore struct {
-	Cache interfaces.Cache
+	Cache cache.Cache
 }
 type FixedWindowState struct {
 	mu           sync.Mutex

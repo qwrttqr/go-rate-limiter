@@ -1,4 +1,4 @@
-package interfaces
+package cache
 
 type Cache interface {
 	Store(key string, value any)

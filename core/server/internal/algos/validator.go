@@ -1,11 +1,8 @@
-package utils
+package algos
 
 import (
-	"encoding/json"
 	"fmt"
-	"net/http"
 	"qwrttqr-rate-limiter/core/server/internal/config"
-	"qwrttqr-rate-limiter/core/server/internal/interfaces"
 	"reflect"
 )
 
@@ -32,17 +29,4 @@ func CheckRequiredFields(cfg config.AlgoSettings, requiredTags []string) error {
 		}
 	}
 	return nil
-}
-
-func ReadIncomingBody(r *http.Request) (*interfaces.IncomingBody, error) {
-	defer r.Body.Close()
-
-	var body interfaces.IncomingBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		return nil, err
-	}
-	if body.ClientKey == "" {
-		return nil, fmt.Errorf("client key should be not empty")
-	}
-	return &body, nil
 }

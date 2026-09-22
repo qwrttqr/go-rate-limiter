@@ -5,9 +5,8 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"qwrttqr-rate-limiter/core/server/internal/cache"
 	"qwrttqr-rate-limiter/core/server/internal/config"
-	"qwrttqr-rate-limiter/core/server/internal/interfaces"
-	"qwrttqr-rate-limiter/core/server/internal/utils"
 	"strconv"
 	"sync"
 	"time"
@@ -34,10 +33,10 @@ func (tbl *TokenBucketLimiter) Configure() {
 }
 
 func ValidateTokenBucketConfig(cfg config.Configuration) error {
-	return utils.CheckRequiredFields(cfg.AlgoSettings, []string{"capacity", "rate"})
+	return CheckRequiredFields(cfg.AlgoSettings, []string{"capacity", "rate"})
 }
 
-func NewTokenBucketStore(cfg config.Configuration, cacheInstance interfaces.Cache, redisClient *redis.Client) (TokenBucketStore, error) {
+func NewTokenBucketStore(cfg config.Configuration, cacheInstance cache.Cache, redisClient *redis.Client) (TokenBucketStore, error) {
 	switch cfg.Store {
 	case "in_memory":
 		return &InMemoryBucketStore{Cache: cacheInstance}, nil
@@ -49,7 +48,7 @@ func NewTokenBucketStore(cfg config.Configuration, cacheInstance interfaces.Cach
 }
 
 func (tbl *TokenBucketLimiter) LimitHTTP(w http.ResponseWriter, r *http.Request) {
-	body, err := utils.ReadIncomingBody(r)
+	body, err := ReadIncomingBody(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -71,7 +70,7 @@ func (tbl *TokenBucketLimiter) LimitHTTP(w http.ResponseWriter, r *http.Request)
 }
 
 type InMemoryBucketStore struct {
-	Cache interfaces.Cache
+	Cache cache.Cache
 }
 
 type BucketState struct {

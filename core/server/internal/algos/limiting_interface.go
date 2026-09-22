@@ -1,4 +1,4 @@
-package interfaces
+package algos
 
 import (
 	"net/http"

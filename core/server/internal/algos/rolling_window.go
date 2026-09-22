@@ -4,9 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"qwrttqr-rate-limiter/core/server/internal/cache"
 	"qwrttqr-rate-limiter/core/server/internal/config"
-	"qwrttqr-rate-limiter/core/server/internal/interfaces"
-	"qwrttqr-rate-limiter/core/server/internal/utils"
 	"sync"
 	"time"
 
@@ -32,10 +31,10 @@ func (rwl *RollingWindowLimiter) Configure() {
 }
 
 func ValidateRollingWindowConfiguration(cfg config.Configuration) error {
-	return utils.CheckRequiredFields(cfg.AlgoSettings, []string{"window_size", "max_requests"})
+	return CheckRequiredFields(cfg.AlgoSettings, []string{"window_size", "max_requests"})
 }
 
-func NewRollingWindowStore(cfg config.Configuration, cacheInstance interfaces.Cache, redisClient *redis.Client) (RollingWindowStore, error) {
+func NewRollingWindowStore(cfg config.Configuration, cacheInstance cache.Cache, redisClient *redis.Client) (RollingWindowStore, error) {
 	switch cfg.Store {
 	case "in_memory":
 		return &InMemoryRollingWindowStore{Cache: cacheInstance}, nil
@@ -47,7 +46,7 @@ func NewRollingWindowStore(cfg config.Configuration, cacheInstance interfaces.Ca
 }
 
 func (rwl *RollingWindowLimiter) LimitHTTP(w http.ResponseWriter, r *http.Request) {
-	body, err := utils.ReadIncomingBody(r)
+	body, err := ReadIncomingBody(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -71,7 +70,7 @@ type RollingWindowState struct {
 }
 
 type InMemoryRollingWindowStore struct {
-	Cache interfaces.Cache
+	Cache cache.Cache
 }
 
 func (s *InMemoryRollingWindowStore) CheckAndIncrement(ctx context.Context, key string, windowStart, windowSize, currentTime, maxRequests int64) (bool, error) {
