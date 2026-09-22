@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"qwrttqr-rate-limiter/core/server/internal/cache"
 	"qwrttqr-rate-limiter/core/server/internal/config"
+	"strconv"
 	"sync"
 	"time"
 
@@ -13,7 +14,7 @@ import (
 )
 
 type RollingWindowStore interface {
-	CheckAndIncrement(ctx context.Context, key string, windowStart, windowSize, currentTime, maxRequests int64) (bool, error)
+	CheckAndIncrement(ctx context.Context, key string, windowStart, windowSize, currentTime, maxRequests int64) (bool, int64, error)
 }
 type RollingWindowLimiter struct {
 	WindowSize  int64
@@ -53,12 +54,13 @@ func (rwl *RollingWindowLimiter) LimitHTTP(w http.ResponseWriter, r *http.Reques
 	}
 	currentTime := rwl.Now()
 	windowStart := currentTime - rwl.WindowSize
-	allowed, err := rwl.Store.CheckAndIncrement(r.Context(), body.ClientKey, windowStart, rwl.WindowSize, currentTime, rwl.MaxRequests)
+	allowed, retryAfter, err := rwl.Store.CheckAndIncrement(r.Context(), body.ClientKey, windowStart, rwl.WindowSize, currentTime, rwl.MaxRequests)
 	if err != nil {
 		http.Error(w, "rate limiter error", http.StatusInternalServerError)
 		return
 	}
 	if !allowed {
+		w.Header().Set("Retry-After", strconv.FormatInt(retryAfter, 10))
 		http.Error(w, "rate limit exceeded", http.StatusTooManyRequests)
 		return
 	}
@@ -73,7 +75,7 @@ type InMemoryRollingWindowStore struct {
 	Cache cache.Cache
 }
 
-func (s *InMemoryRollingWindowStore) CheckAndIncrement(ctx context.Context, key string, windowStart, windowSize, currentTime, maxRequests int64) (bool, error) {
+func (s *InMemoryRollingWindowStore) CheckAndIncrement(ctx context.Context, key string, windowStart, windowSize, currentTime, maxRequests int64) (bool, int64, error) {
 	val := s.Cache.LoadOrStore(key, &RollingWindowState{
 		Timestamps: make([]int64, 0, maxRequests*2),
 	})
@@ -92,9 +94,11 @@ func (s *InMemoryRollingWindowStore) CheckAndIncrement(ctx context.Context, key 
 
 	if int64(len(window.Timestamps)) < maxRequests {
 		window.Timestamps = append(window.Timestamps, currentTime)
-		return true, nil
+		return true, 0, nil
 	}
-	return false, nil
+	retryAfter := window.Timestamps[0] - windowStart
+
+	return false, retryAfter, nil
 }
 
 type RedisRollingWindowStore struct {
@@ -113,16 +117,20 @@ local count = redis.call("ZCARD", KEYS[1])
 if count < maxRequests then
     redis.call("ZADD", KEYS[1], currentTime, currentTime)
     redis.call("EXPIRE", KEYS[1], windowSize)
-    return 1
+    return {1, 0}
 else
-    return 0
+	local oldest = redis.call("ZRANGE", KEYS[1], 0, 0, "WITHSCORES")
+	local retryAfter = tonumber(oldest[2]) - windowStart
+    return {0, retryAfter}
 end
 `)
 
-func (s *RedisRollingWindowStore) CheckAndIncrement(ctx context.Context, key string, windowStart, windowSize, currentTime, maxRequests int64) (bool, error) {
-	res, err := rollingWindowScript.Run(ctx, s.Client, []string{key}, windowStart, windowSize, currentTime, maxRequests).Int()
+func (s *RedisRollingWindowStore) CheckAndIncrement(ctx context.Context, key string, windowStart, windowSize, currentTime, maxRequests int64) (bool, int64, error) {
+	res, err := rollingWindowScript.Run(ctx, s.Client, []string{key}, windowStart, windowSize, currentTime, maxRequests).Int64Slice()
 	if err != nil {
-		return false, err
+		return false, 0, err
 	}
-	return res == 1, nil
+	allowed := res[0] == 1
+	retryAfter := res[1]
+	return allowed, retryAfter, nil
 }
