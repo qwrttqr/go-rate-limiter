@@ -1,10 +1,6 @@
-CLIENTS ?= 100
-ITERATIONS ?= 50
-MIN_REQS ?= 10
-MAX_REQS ?= 100
-MIN_COOLDOWN ?= 1
-MAX_COOLDOWN ?= 3
-
+CLIENTS ?= 50
+DURATION ?= 600
+INTERVAL ?= 200
 .PHONY: help test_in_memory test_redis clean
 
 help:
@@ -14,16 +10,13 @@ help:
 
 test_in_memory:
 	@echo "Configuring engine for 'in_memory' processing..."
-	@docker build -t temp . || (echo "Build failed no container was run" && exit 1)
-	@docker run -d --name temp-container -e STORE_BACKEND=in_memory -p 8080:8080 temp
+	@docker build -t go-rate-limiter-stress-test . || (echo "Build failed no container was run" && exit 1)
+	@docker run -d --name go-rate-limiter-stress-test -e STORE_BACKEND=in_memory -p 8080:8080 go-rate-limiter-stress-test
 	@echo "Executing benchmark execution matrix..."
 	-go run ./test \
 	   -clients $(CLIENTS) \
-	   -iterations $(ITERATIONS) \
-	   -clients_min_reqs $(MIN_REQS) \
-	   -clients_max_reqs $(MAX_REQS) \
-	   -clients_min_cooldown $(MIN_COOLDOWN) \
-	   -clients_max_cooldown $(MAX_COOLDOWN)
+	   -duration $(DURATION) \
+	   -interval $(INTERVAL)
 	$(MAKE) clean
 
 test_redis:
@@ -32,15 +25,12 @@ test_redis:
 	@echo "Executing benchmark execution matrix..."
 	-go run ./test \
 	   -clients $(CLIENTS) \
-	   -iterations $(ITERATIONS) \
-	   -clients_min_reqs $(MIN_REQS) \
-	   -clients_max_reqs $(MAX_REQS) \
-	   -clients_min_cooldown $(MIN_COOLDOWN) \
-	   -clients_max_cooldown $(MAX_COOLDOWN)
+	   -duration $(DURATION) \
+	   -interval $(INTERVAL)
 	$(MAKE) clean
 
 clean:
 	go clean
-	-docker rm -f temp-container
+	-docker rm -f go-rate-limiter-stress-test
 	-docker compose down -v
 	-docker image prune -f

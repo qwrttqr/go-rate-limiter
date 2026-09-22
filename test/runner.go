@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -16,31 +17,62 @@ func Run(config TestingConfig) {
 		os.Exit(1)
 	}
 
+	clients := CreateClients(config.ClientCount, config.Interval)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(config.Duration)*time.Second)
+	defer cancel()
 	var wg sync.WaitGroup
-	clients := CreateClients(config.ClientCount, config.ClientRequestsMin, config.ClientRequestsMax, config.ClientCooldownMin, config.ClientCooldownMax)
-	for i := range config.Iterations {
+	for i := 0; i < config.ClientCount; i++ {
 		wg.Add(1)
-		go ClientRunner(clients[i], &wg)
+		go ClientRunner(ctx, clients[i], &wg)
 	}
 	wg.Wait()
-	fmt.Println("All client runners have finished")
+	fmt.Println("flood test finished")
 }
 
-func ClientRunner(client Client, wg *sync.WaitGroup) {
+func ClientRunner(ctx context.Context, client Client, wg *sync.WaitGroup) {
 	defer wg.Done()
-	post, err := http.Post("http://localhost:8080", "application/json", strings.NewReader(fmt.Sprintf(`{"client_key": "%d"}`, client.Id)))
-	if err != nil {
-		return
-	}
-	defer post.Body.Close()
-	retryAfter := post.Header.Get("Retry-After")
-	if retryAfter != "" {
-		seconds, err := strconv.Atoi(retryAfter)
-		if err != nil {
-			fmt.Printf("Invalid retry after value %s", retryAfter)
+	ticker := time.NewTicker(time.Duration(client.Interval) * time.Millisecond)
+	defer ticker.Stop()
+	var retryAfterSeconds int
+	var lastRequestTime time.Time
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			now := time.Now()
+			post, err := http.Post("http://localhost:8080/limit", "application/json", strings.NewReader(fmt.Sprintf(`{"client_key": "%d"}`, client.Id)))
+			if err != nil {
+				fmt.Printf(err.Error())
+			}
+			post.Body.Close()
+			if retryAfterSeconds > 0 {
+				retryUntil := lastRequestTime.Add(
+					time.Duration(retryAfterSeconds) * time.Second,
+				)
+
+				if now.Before(retryUntil) {
+					if post.StatusCode != 429 {
+						fmt.Printf("!!!client %d was not fallback!!!\n", client.Id)
+						fmt.Printf("retry after was %d", retryAfterSeconds)
+					}
+					fmt.Printf(
+						"client %d: request is inside Retry-After period\n",
+						client.Id,
+					)
+				}
+			}
+
+			retryAfter := post.Header.Get("Retry-After")
+
+			if retryAfter != "" {
+				var err error
+				retryAfterSeconds, err = strconv.Atoi(retryAfter)
+				if err != nil {
+					fmt.Printf(err.Error())
+				}
+			}
 		}
-		fmt.Printf("Client %d waiting for %d seconds", client.Id, seconds)
-		time.Sleep(time.Duration(seconds) * time.Second)
 	}
 }
 

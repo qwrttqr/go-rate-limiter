@@ -24,18 +24,12 @@ func main() {
 		}
 		// example format -clients 100 -clients_min_reqs 10 -clients_max_reqs 100  -clients_min_cooldown 10 -clients_max_cooldown 100
 		switch flag {
-		case "-clients", "--clients":
+		case "-clients":
 			cfg.ClientCount = valueInt
-		case "-clients_max_reqs", "--clients_max_reqs":
-			cfg.ClientRequestsMax = valueInt
-		case "-clients_min_reqs", "--clients_min_reqs":
-			cfg.ClientRequestsMin = valueInt
-		case "-clients_max_cooldown", "--clients_max_cooldown":
-			cfg.ClientCooldownMax = valueInt
-		case "-clients_min_cooldown", "--clients_min_cooldown":
-			cfg.ClientCooldownMin = valueInt
-		case "-iterations", "--iterations":
-			cfg.Iterations = valueInt
+		case "-duration":
+			cfg.Duration = valueInt
+		case "-interval":
+			cfg.Interval = valueInt
 		}
 	}
 	fmt.Printf("Parsed Configuration: %+v\n", cfg)
