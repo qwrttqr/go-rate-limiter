@@ -44,6 +44,7 @@ func ClientRunner(ctx context.Context, client Client, wg *sync.WaitGroup) {
 			post, err := http.Post("http://localhost:8080/limit", "application/json", strings.NewReader(fmt.Sprintf(`{"client_key": "%d"}`, client.Id)))
 			if err != nil {
 				fmt.Printf(err.Error())
+				continue
 			}
 			post.Body.Close()
 			if retryAfterSeconds > 0 {
