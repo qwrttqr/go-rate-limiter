@@ -15,6 +15,30 @@ algorithms.
 3. Ability to use this rate-limiter as middleware in your service
 4. Support of gRPC
 
+## Testing 
+
+The repository supports the stress-testing, all you need is docker and make.
+1. Configure rate limiter(don't forget about `.env` file):
+```yaml
+store: "in_memory"
+use_algo: "rolling_window"
+algo_settings:
+  window_size: 20 # seconds
+  max_requests: 50
+backends:
+  in_memory:
+    default_ttl: 10 # seconds
+    eviction_time: 15 # seconds
+  redis:
+    addr: "redis:6379"
+    password: "m1re1di$$sss"
+    db: 0
+    default_ttl: 1000 
+```
+2. Run tests:
+```shell
+make test_in_memory
+```
 ## How to use
 
 ### Configuration
