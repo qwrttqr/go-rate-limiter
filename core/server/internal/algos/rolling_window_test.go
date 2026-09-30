@@ -40,7 +40,7 @@ func TestRollingWindow_logic(t *testing.T) {
 			for i := 0; i <= calls; i++ {
 				currentTime := rw.Now()
 				windowStart := currentTime - rw.WindowSize
-				allowed, err := rw.Store.CheckAndIncrement(context.Background(), tt.key, windowStart, rw.WindowSize, currentTime, rw.MaxRequests)
+				allowed, _, err := rw.Store.CheckAndIncrement(context.Background(), tt.key, windowStart, rw.WindowSize, currentTime, rw.MaxRequests)
 				if err != nil {
 					t.Fatalf("call %d: unexpected error: %v", i, err)
 				}
@@ -66,14 +66,14 @@ func TestRollingWindow_window_moved(t *testing.T) {
 	rw.Configure()
 
 	ctx := context.Background()
-	hit := func() (bool, error) {
+	hit := func() (bool, int64, error) {
 		currentTime := rw.Now()
 		windowStart := currentTime - rw.WindowSize
 		return rw.Store.CheckAndIncrement(ctx, "user-123", windowStart, rw.WindowSize, currentTime, rw.MaxRequests)
 	}
 
 	for i := range 5 {
-		allowed, err := hit()
+		allowed, _, err := hit()
 		if err != nil {
 			t.Fatalf("call %d unexpected error: %v", i, err)
 		}
@@ -81,7 +81,7 @@ func TestRollingWindow_window_moved(t *testing.T) {
 			t.Fatalf("call %d unexpected disallow while draining", i)
 		}
 	}
-	if allowed, err := hit(); err != nil {
+	if allowed, _, err := hit(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	} else if allowed {
 		t.Fatal("expected disallowed once max requests is drained")
@@ -90,7 +90,7 @@ func TestRollingWindow_window_moved(t *testing.T) {
 	// move fakeNow past the window entirely — oldest timestamps should fall out
 	fakeNow += 11
 
-	if allowed, err := hit(); err != nil {
+	if allowed, _, err := hit(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	} else if !allowed {
 		t.Fatal("expected allowed once window has fully slid past old requests")
@@ -110,14 +110,14 @@ func TestRollingWindow_partial_slide(t *testing.T) {
 	rw.Configure()
 
 	ctx := context.Background()
-	hit := func() (bool, error) {
+	hit := func() (bool, int64, error) {
 		currentTime := rw.Now()
 		windowStart := currentTime - rw.WindowSize
 		return rw.Store.CheckAndIncrement(ctx, "user-123", windowStart, rw.WindowSize, currentTime, rw.MaxRequests)
 	}
 
 	for i := range 5 {
-		allowed, err := hit()
+		allowed, _, err := hit()
 		if err != nil {
 			t.Fatalf("call %d unexpected error: %v", i, err)
 		}
@@ -128,7 +128,7 @@ func TestRollingWindow_partial_slide(t *testing.T) {
 
 	fakeNow += 1
 
-	if allowed, err := hit(); err != nil {
+	if allowed, _, err := hit(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	} else if allowed {
 		t.Fatal("expected still disallowed — window has not slid past prior requests yet")
