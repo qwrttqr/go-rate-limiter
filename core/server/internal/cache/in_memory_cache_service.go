@@ -34,6 +34,7 @@ func (cache *InMemoryCache) Get(key string) (any, error) {
 	if !present {
 		return nil, errors.New("cache entry is not present")
 	}
+	result.time = time.Now().Unix()
 	return result.entry, nil
 }
 
@@ -45,6 +46,7 @@ func (cache *InMemoryCache) LoadOrStore(key string, value any) any {
 		cache.entries[key] = &cacheEntry{entry: value, time: time.Now().Unix()}
 		return value
 	}
+	result.time = time.Now().Unix()
 	return result.entry
 }
 
