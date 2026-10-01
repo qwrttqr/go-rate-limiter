@@ -6,7 +6,7 @@ algorithms.
 ## What already done
 
 1. In memory auto-evicting cache
-2. All rate-limiting algos present in the paper in in_memory style
+2. All rate-limiting algos present in the paper are recreated with in_memory style
 
 ## What will be done
 
@@ -70,6 +70,8 @@ backends:
     - use `window_size` and `max_requests` for `rolling_window` and `fixed_window` algorithms.
     - use `capacity` and `rate` for `token_bucket` algo.
   
+Then use `http<s>://<your_host:port>/limit` - for limiting by HTTP.
+
 ### Build
 
 If you want to use rate-limiter as standalone service build it as container:
