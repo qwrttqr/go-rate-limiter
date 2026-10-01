@@ -48,16 +48,13 @@ func NewTokenBucketStore(cfg config.Configuration, cacheInstance cache.Cache, re
 }
 
 func (tbl *TokenBucketLimiter) LimitHTTP(w http.ResponseWriter, r *http.Request) {
-	body, err := ReadIncomingBody(r)
+	parsedHeaders, err := ReadIncomingHeader(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	var requiredTokens int64 = 1
-	if body.RequiredTokens != nil {
-		requiredTokens = *body.RequiredTokens
-	}
-	allowed, retryAfter, err := tbl.Store.TakeToken(r.Context(), body.ClientKey, tbl.Rate, requiredTokens, tbl.Now(), tbl.Capacity)
+	allowed, retryAfter, err := tbl.Store.TakeToken(r.Context(), parsedHeaders.ClientKey, tbl.Rate, requiredTokens, tbl.Now(), tbl.Capacity)
 	if err != nil {
 		http.Error(w, "rate limiter error", http.StatusInternalServerError)
 		return

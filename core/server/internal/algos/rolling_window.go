@@ -47,14 +47,16 @@ func NewRollingWindowStore(cfg config.Configuration, cacheInstance cache.Cache, 
 }
 
 func (rwl *RollingWindowLimiter) LimitHTTP(w http.ResponseWriter, r *http.Request) {
-	body, err := ReadIncomingBody(r)
+	parsedHeaders, err := ReadIncomingHeader(r)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "rate limiter error", http.StatusInternalServerError)
 		return
 	}
+
 	currentTime := rwl.Now()
 	windowStart := currentTime - rwl.WindowSize
-	allowed, retryAfter, err := rwl.Store.CheckAndIncrement(r.Context(), body.ClientKey, windowStart, rwl.WindowSize, currentTime, rwl.MaxRequests)
+
+	allowed, retryAfter, err := rwl.Store.CheckAndIncrement(r.Context(), parsedHeaders.ClientKey, windowStart, rwl.WindowSize, currentTime, rwl.MaxRequests)
 	if err != nil {
 		http.Error(w, "rate limiter error", http.StatusInternalServerError)
 		return
@@ -90,8 +92,10 @@ func (s *InMemoryRollingWindowStore) CheckAndIncrement(ctx context.Context, key 
 			break
 		}
 	}
-	window.Timestamps = window.Timestamps[i:]
-
+	if i > 0 {
+		copy(window.Timestamps, window.Timestamps[i:])
+		window.Timestamps = window.Timestamps[:len(window.Timestamps)-i]
+	}
 	if int64(len(window.Timestamps)) < maxRequests {
 		window.Timestamps = append(window.Timestamps, currentTime)
 		return true, 0, nil

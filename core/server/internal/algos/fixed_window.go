@@ -47,7 +47,7 @@ func NewFixedWindowStore(cfg config.Configuration, cacheInstance cache.Cache, re
 }
 
 func (fwl *FixedWindowLimiter) LimitHTTP(w http.ResponseWriter, r *http.Request) {
-	body, err := ReadIncomingBody(r)
+	body, err := ReadIncomingHeader(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

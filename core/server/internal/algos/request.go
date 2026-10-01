@@ -1,20 +1,28 @@
 package algos
 
 import (
-	"encoding/json"
-	"fmt"
+	"errors"
 	"net/http"
+	"strconv"
 )
 
-func ReadIncomingBody(r *http.Request) (*IncomingBody, error) {
+func ReadIncomingHeader(r *http.Request) (*IncomingHeaders, error) {
 	defer r.Body.Close()
-
-	var body IncomingBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		return nil, err
+	clientKey := r.Header.Get("X-Client-Key")
+	requiredTokensStr := r.Header.Get("X-Required-Tokens")
+	if clientKey == "" {
+		return nil, errors.New("missing mandatory X-Client-Key header")
 	}
-	if body.ClientKey == "" {
-		return nil, fmt.Errorf("client key should be not empty")
+	var requiredTokens int64 = 1
+	if requiredTokensStr != "" {
+		parsedTokens, err := strconv.ParseInt(requiredTokensStr, 10, 64)
+		if err != nil {
+			return nil, errors.New("invalid X-Required-Tokens header: must be a valid integer")
+		}
+		if parsedTokens <= 0 {
+			return nil, errors.New("invalid X-Required-Tokens header: must be greater than 0")
+		}
+		requiredTokens = parsedTokens
 	}
-	return &body, nil
+	return &IncomingHeaders{ClientKey: clientKey, RequiredTokens: requiredTokens}, nil
 }

@@ -4,9 +4,9 @@ import (
 	"net/http"
 )
 
-type IncomingBody struct {
-	ClientKey      string `json:"client_key"`
-	RequiredTokens *int64 `json:"required_tokens"`
+type IncomingHeaders struct {
+	ClientKey      string
+	RequiredTokens int64
 }
 
 type RateLimiterInterface interface {

@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 )
@@ -32,8 +31,9 @@ func Run(config TestingConfig) {
 	var httpClient = &http.Client{
 		Timeout: 5 * time.Second,
 		Transport: &http.Transport{
-			MaxIdleConns:        3000,
-			MaxIdleConnsPerHost: 3000,
+			MaxIdleConns:        config.ClientCount,
+			MaxIdleConnsPerHost: config.ClientCount,
+			MaxConnsPerHost:     config.ClientCount,
 			IdleConnTimeout:     90 * time.Second,
 		},
 	}
@@ -68,7 +68,6 @@ func ClientRunner(ctx context.Context, httpClient *http.Client, stats *ClientSta
 
 	var blockedUntil time.Time
 	var secs int
-	body := fmt.Sprintf(`{"client_key": "%d"}`, client.Id)
 
 	for {
 		select {
@@ -76,14 +75,27 @@ func ClientRunner(ctx context.Context, httpClient *http.Client, stats *ClientSta
 			return
 		case <-ticker.C:
 			requestStartedAt := time.Now()
-			post, err := httpClient.Post("http://localhost:8080/limit", "application/json", strings.NewReader(body))
+			req, err := http.NewRequestWithContext(ctx, "POST", "http://localhost:8080/limit", nil)
+			if err != nil {
+				stats.Errors++
+				fmt.Println("failed to create request:", err.Error())
+				continue
+			}
+
+			req.Header.Set("X-Client-Key", strconv.Itoa(client.Id))
+
+			post, err := httpClient.Do(req)
 			responseReceivedAt := time.Now()
 
-			stats.Responded++
 			lat := time.Since(requestStartedAt)
 
 			if err != nil {
+				if ctx.Err() != nil {
+					return
+				}
 				stats.Errors++
+				stats.Responded++
+
 				fmt.Println(err.Error())
 				continue
 			}
@@ -96,7 +108,7 @@ func ClientRunner(ctx context.Context, httpClient *http.Client, stats *ClientSta
 
 			if startedInWindow && finishedInWindow && post.StatusCode == http.StatusOK {
 				fmt.Printf(
-					"client=%d\nretryAfter=%d\nndeadline=%s\nremaining=%s\n",
+					"client=%d\nretryAfter=%d\ndeadline=%s\nremaining=%s\n",
 					client.Id,
 					secs,
 					blockedUntil.Format(time.RFC3339Nano),
