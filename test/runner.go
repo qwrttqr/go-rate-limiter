@@ -48,7 +48,7 @@ func Run(config TestingConfig) {
 	defer cancel()
 
 	var wg sync.WaitGroup
-	start := time.Now().Unix()
+	start := time.Now()
 
 	for i := 0; i < config.ClientCount; i++ {
 		wg.Add(1)
@@ -56,7 +56,7 @@ func Run(config TestingConfig) {
 	}
 	wg.Wait()
 
-	Report(stats, time.Duration(start))
+	Report(stats, time.Since(start))
 
 	fmt.Println("flood test finished")
 }
@@ -67,7 +67,7 @@ func ClientRunner(ctx context.Context, httpClient *http.Client, stats *ClientSta
 	defer ticker.Stop()
 
 	var blockedUntil time.Time
-
+	var secs int
 	body := fmt.Sprintf(`{"client_key": "%d"}`, client.Id)
 
 	for {
@@ -96,10 +96,9 @@ func ClientRunner(ctx context.Context, httpClient *http.Client, stats *ClientSta
 
 			if startedInWindow && finishedInWindow && post.StatusCode == http.StatusOK {
 				fmt.Printf(
-					"client=%d\nstarted=%s\nreceived=%s\ndeadline=%s\nremaining=%s\n",
+					"client=%d\nretryAfter=%d\nndeadline=%s\nremaining=%s\n",
 					client.Id,
-					requestStartedAt.Format(time.RFC3339Nano),
-					responseReceivedAt.Format(time.RFC3339Nano),
+					secs,
 					blockedUntil.Format(time.RFC3339Nano),
 					blockedUntil.Sub(responseReceivedAt),
 				)
@@ -113,8 +112,9 @@ func ClientRunner(ctx context.Context, httpClient *http.Client, stats *ClientSta
 			case http.StatusTooManyRequests:
 				stats.Disallowed++
 				stats.LimitedLat = append(stats.LimitedLat, lat)
-				if secs, err := strconv.Atoi(post.Header.Get("Retry-After")); err == nil {
-					blockedUntil = responseReceivedAt.Add(time.Duration(secs) * time.Second)
+				if s, err := strconv.Atoi(post.Header.Get("Retry-After")); err == nil {
+					secs = s
+					blockedUntil = requestStartedAt.Truncate(time.Second).Add(time.Duration(secs) * time.Second)
 				}
 			}
 		}
