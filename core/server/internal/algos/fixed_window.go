@@ -78,16 +78,17 @@ type FixedWindowState struct {
 }
 
 func (s *InMemoryFixedWindowStore) CheckAndIncrement(
-	ctx context.Context, key string,
+	_ context.Context, key string,
 	windowStart,
 	windowSize,
 	maxRequests,
 	now int64,
 ) (bool, int64, error) {
-
-	val := s.Cache.LoadOrStore(key, &FixedWindowState{
-		Count:        0,
-		StoredWindow: windowStart,
+	val := s.Cache.LoadOrStore(key, func() any {
+		return &FixedWindowState{
+			Count:        0,
+			StoredWindow: windowStart,
+		}
 	})
 	window := val.(*FixedWindowState)
 

@@ -19,6 +19,5 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-
 volumes:
   redis_data:

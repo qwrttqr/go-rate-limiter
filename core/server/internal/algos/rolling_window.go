@@ -77,9 +77,17 @@ type InMemoryRollingWindowStore struct {
 	Cache cache.Cache
 }
 
-func (s *InMemoryRollingWindowStore) CheckAndIncrement(ctx context.Context, key string, windowStart, windowSize, currentTime, maxRequests int64) (bool, int64, error) {
-	val := s.Cache.LoadOrStore(key, &RollingWindowState{
-		Timestamps: make([]int64, 0, maxRequests*2),
+func (s *InMemoryRollingWindowStore) CheckAndIncrement(
+	_ context.Context,
+	key string,
+	windowStart,
+	_,
+	currentTime,
+	maxRequests int64) (bool, int64, error) {
+	val := s.Cache.LoadOrStore(key, func() any {
+		return &RollingWindowState{
+			Timestamps: make([]int64, 0, maxRequests*2),
+		}
 	})
 	window := val.(*RollingWindowState)
 

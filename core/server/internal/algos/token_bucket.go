@@ -76,10 +76,18 @@ type BucketState struct {
 	LastRefill int64
 }
 
-func (s *InMemoryBucketStore) TakeToken(ctx context.Context, key string, rate float64, tokensRequired, now, capacity int64) (bool, int64, error) {
-	val := s.Cache.LoadOrStore(key, &BucketState{
-		Tokens:     capacity,
-		LastRefill: now,
+func (s *InMemoryBucketStore) TakeToken(
+	_ context.Context,
+	key string,
+	rate float64,
+	tokensRequired,
+	now,
+	capacity int64) (bool, int64, error) {
+	val := s.Cache.LoadOrStore(key, func() any {
+		return &BucketState{
+			Tokens:     capacity,
+			LastRefill: now,
+		}
 	})
 
 	bucket := val.(*BucketState)

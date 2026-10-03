@@ -16,7 +16,7 @@ func NewRateLimiter() (algos.RateLimiterInterface, error) {
 		return nil, fmt.Errorf("failed to read config: %w", err)
 	}
 
-	var cacheInstance *cache.InMemoryCache
+	var cacheInstance *cache.ShardedInMemoryCache
 	var redisClient *redis.Client
 	switch cfg.Store {
 	case "in_memory":
