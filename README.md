@@ -57,149 +57,87 @@ And then run `docker run --rm -p 8080:8080 <image-name>`.
 
 ## Benchmarks
 
-## HTTP
+You can run bench on your own machine with `make bench COUNT=<N> cPUS=<M>`
 
-### Setup
+The benches:
 
-- **Machine:** a single desktop, Ryzen 5 7500F (6 cores, 12 threads), Docker on Windows. The load generator and the
-  server ran on the same machine, so they compete for CPU.
-- **Server container:** 3 CPUs. **Vegeta container:** 6 CPUs.
-- **Load:** 30,000 req/s fixed rate, 30 s per run.
-- **Modes:** `baseline` (`DO_ALGO=0`) goes through the full HTTP stack but skips the limiter, `limiter` (`DO_ALGO=1`)
-  runs the algorithm.
-
-Scenarios:
-
-- `uniform100k`: 100,000 keys, uniform distribution. Every request is allowed.
-- `zipf`: 100,000 keys, Zipf distribution (a few hot keys, long tail of cold ones). Mixed allowed and rejected.
-- `single`: one key. After 500 requests everything is rejected.
-
-```shell
-vegeta attack -targets=/targets/${SCENARIO}.txt -rate=${RATE} -duration=${DURATION:-30s} -workers=500 -max-workers=2000 -connections=2000
+```text
+go test -run='^$' -bench=. -benchmem -count=1 -cpu=1,4,8,12 ./bench
+goos: windows
+goarch: amd64
+pkg: qwrttqr-rate-limiter/bench
+cpu: AMD Ryzen 5 7500F 6-Core Processor             
+BenchmarkFixedWindow/single_key/allow                   56308683                21.09 ns/op            0 B/op          0 allocs/op
+BenchmarkFixedWindow/single_key/allow-4                 32228694                36.01 ns/op            0 B/op          0 allocs/op
+BenchmarkFixedWindow/single_key/allow-8                 21281122                49.20 ns/op            0 B/op          0 allocs/op
+BenchmarkFixedWindow/single_key/allow-12                21743620                50.77 ns/op            0 B/op          0 allocs/op
+BenchmarkFixedWindow/single_key/deny                    57306315                21.69 ns/op            0 B/op          0 allocs/op
+BenchmarkFixedWindow/single_key/deny-4                  35630404                32.10 ns/op            0 B/op          0 allocs/op
+BenchmarkFixedWindow/single_key/deny-8                  21430484                54.28 ns/op            0 B/op          0 allocs/op
+BenchmarkFixedWindow/single_key/deny-12                 19749672                60.63 ns/op            0 B/op          0 allocs/op
+BenchmarkFixedWindow/uniform_100k/allow                 17826820               100.1 ns/op             0 B/op          0 allocs/op
+BenchmarkFixedWindow/uniform_100k/allow-4               38755827                30.41 ns/op            0 B/op          0 allocs/op
+BenchmarkFixedWindow/uniform_100k/allow-8               70427080                17.10 ns/op            0 B/op          0 allocs/op
+BenchmarkFixedWindow/uniform_100k/allow-12              93669501                12.46 ns/op            0 B/op          0 allocs/op
+BenchmarkFixedWindow/uniform_100k/deny                  19345477                62.61 ns/op            0 B/op          0 allocs/op
+BenchmarkFixedWindow/uniform_100k/deny-4                36055633                31.32 ns/op            0 B/op          0 allocs/op
+BenchmarkFixedWindow/uniform_100k/deny-8                64787469                17.84 ns/op            0 B/op          0 allocs/op
+BenchmarkFixedWindow/uniform_100k/deny-12               89258484                12.93 ns/op            0 B/op          0 allocs/op
+BenchmarkFixedWindow/zipf_100k/allow                    44851597                33.13 ns/op            0 B/op          0 allocs/op
+BenchmarkFixedWindow/zipf_100k/allow-4                  25398061                45.11 ns/op            0 B/op          0 allocs/op
+BenchmarkFixedWindow/zipf_100k/allow-8                  21211081                53.46 ns/op            0 B/op          0 allocs/op
+BenchmarkFixedWindow/zipf_100k/allow-12                 22018509                53.20 ns/op            0 B/op          0 allocs/op
+BenchmarkFixedWindow/zipf_100k/deny                     45966091                33.09 ns/op            0 B/op          0 allocs/op
+BenchmarkFixedWindow/zipf_100k/deny-4                   26478434                46.47 ns/op            0 B/op          0 allocs/op
+BenchmarkFixedWindow/zipf_100k/deny-8                   22155386                54.79 ns/op            0 B/op          0 allocs/op
+BenchmarkFixedWindow/zipf_100k/deny-12                  21086331                58.82 ns/op            0 B/op          0 allocs/op
+BenchmarkRollingWindow/single_key/allow                 48130633                24.26 ns/op           48 B/op          0 allocs/op
+BenchmarkRollingWindow/single_key/allow-4               27737712                42.83 ns/op           43 B/op          0 allocs/op
+BenchmarkRollingWindow/single_key/allow-8               18548516                65.87 ns/op           41 B/op          0 allocs/op
+BenchmarkRollingWindow/single_key/allow-12              17378282                70.37 ns/op           44 B/op          0 allocs/op
+BenchmarkRollingWindow/single_key/deny                  49189197                22.18 ns/op            0 B/op          0 allocs/op
+BenchmarkRollingWindow/single_key/deny-4                32335164                37.42 ns/op            0 B/op          0 allocs/op
+BenchmarkRollingWindow/single_key/deny-8                20683236                57.47 ns/op            0 B/op          0 allocs/op
+BenchmarkRollingWindow/single_key/deny-12               19619544                61.06 ns/op            0 B/op          0 allocs/op
+BenchmarkRollingWindow/uniform_100k/allow               11891265               163.4 ns/op            22 B/op          0 allocs/op
+BenchmarkRollingWindow/uniform_100k/allow-4             31139793                54.78 ns/op           22 B/op          0 allocs/op
+BenchmarkRollingWindow/uniform_100k/allow-8             59801160                31.52 ns/op           22 B/op          0 allocs/op
+BenchmarkRollingWindow/uniform_100k/allow-12            78769100                22.02 ns/op           23 B/op          0 allocs/op
+BenchmarkRollingWindow/uniform_100k/deny                10065349               120.7 ns/op             0 B/op          0 allocs/op
+BenchmarkRollingWindow/uniform_100k/deny-4              29053438                38.84 ns/op            0 B/op          0 allocs/op
+BenchmarkRollingWindow/uniform_100k/deny-8              57521126                21.41 ns/op            0 B/op          0 allocs/op
+BenchmarkRollingWindow/uniform_100k/deny-12             76720455                14.73 ns/op            0 B/op          0 allocs/op
+BenchmarkRollingWindow/zipf_100k/allow                  29967036                33.76 ns/op           42 B/op          0 allocs/op
+BenchmarkRollingWindow/zipf_100k/allow-4                24476508                50.26 ns/op           42 B/op          0 allocs/op
+BenchmarkRollingWindow/zipf_100k/allow-8                21045025                56.36 ns/op           45 B/op          0 allocs/op
+BenchmarkRollingWindow/zipf_100k/allow-12               18872197                59.69 ns/op           42 B/op          0 allocs/op
+BenchmarkRollingWindow/zipf_100k/deny                   43794181                26.95 ns/op            0 B/op          0 allocs/op
+BenchmarkRollingWindow/zipf_100k/deny-4                 27759463                44.86 ns/op            0 B/op          0 allocs/op
+BenchmarkRollingWindow/zipf_100k/deny-8                 22893991                53.38 ns/op            0 B/op          0 allocs/op
+BenchmarkRollingWindow/zipf_100k/deny-12                20852665                55.23 ns/op            0 B/op          0 allocs/op
+BenchmarkTokenBucket/single_key/allow                   50584034                21.54 ns/op            0 B/op          0 allocs/op
+BenchmarkTokenBucket/single_key/allow-4                 31128162                37.97 ns/op            0 B/op          0 allocs/op
+BenchmarkTokenBucket/single_key/allow-8                 20739536                56.76 ns/op            0 B/op          0 allocs/op
+BenchmarkTokenBucket/single_key/allow-12                19343419                59.92 ns/op            0 B/op          0 allocs/op
+BenchmarkTokenBucket/single_key/deny                    51248104                21.86 ns/op            0 B/op          0 allocs/op
+BenchmarkTokenBucket/single_key/deny-4                  29546898                40.51 ns/op            0 B/op          0 allocs/op
+BenchmarkTokenBucket/single_key/deny-8                  19755330                58.78 ns/op            0 B/op          0 allocs/op
+BenchmarkTokenBucket/single_key/deny-12                 18852451                61.90 ns/op            0 B/op          0 allocs/op
+BenchmarkTokenBucket/uniform_100k/allow                 18177328                74.44 ns/op            0 B/op          0 allocs/op
+BenchmarkTokenBucket/uniform_100k/allow-4               32287052                33.88 ns/op            0 B/op          0 allocs/op
+BenchmarkTokenBucket/uniform_100k/allow-8               57865346                19.32 ns/op            0 B/op          0 allocs/op
+BenchmarkTokenBucket/uniform_100k/allow-12              69705435                14.38 ns/op            0 B/op          0 allocs/op
+BenchmarkTokenBucket/uniform_100k/deny                  15133953                70.50 ns/op            0 B/op          0 allocs/op
+BenchmarkTokenBucket/uniform_100k/deny-4                37284100                31.37 ns/op            0 B/op          0 allocs/op
+BenchmarkTokenBucket/uniform_100k/deny-8                67392634                17.43 ns/op            0 B/op          0 allocs/op
+BenchmarkTokenBucket/uniform_100k/deny-12               88353531                13.63 ns/op            0 B/op          0 allocs/op
+BenchmarkTokenBucket/zipf_100k/allow                    42428763                31.25 ns/op            0 B/op          0 allocs/op
+BenchmarkTokenBucket/zipf_100k/allow-4                  26150000                44.76 ns/op            0 B/op          0 allocs/op
+BenchmarkTokenBucket/zipf_100k/allow-8                  21181690                53.84 ns/op            0 B/op          0 allocs/op
+BenchmarkTokenBucket/zipf_100k/allow-12                 21550485                54.99 ns/op            0 B/op          0 allocs/op
+BenchmarkTokenBucket/zipf_100k/deny                     44520292                30.87 ns/op            0 B/op          0 allocs/op
+BenchmarkTokenBucket/zipf_100k/deny-4                   26432766                45.39 ns/op            0 B/op          0 allocs/op
+BenchmarkTokenBucket/zipf_100k/deny-8                   21224098                54.54 ns/op            0 B/op          0 allocs/op
+BenchmarkTokenBucket/zipf_100k/deny-12                  21434962                56.57 ns/op            0 B/op          0 allocs/op
 ```
 
-### Rolling window
-
-```yaml
-store: "in_memory"
-use_algo: "rolling_window"
-algo_settings:
-  window_size: 60 # seconds
-  max_requests: 500
-backends:
-  in_memory:
-    default_ttl: 30 # seconds
-    eviction_time: 120 # seconds
-  redis:
-    addr: "redis:6379"
-    password: "PASS"
-    db: 0
-    default_ttl: 1000
-```
-
-#### Results
-
-##### p50 latency (µs)
-
-| mode                   | uniform100k | zipf  | single |
-|------------------------|-------------|-------|--------|
-| baseline (`DO_ALGO=0`) | 157.1       | 156.9 | 154.5  |
-| limiter (`DO_ALGO=1`)  | 160.8       | 164.3 | 167.5  |
-
-##### p95 latency (µs)
-
-| mode                   | uniform100k | zipf  | single |
-|------------------------|-------------|-------|--------|
-| baseline (`DO_ALGO=0`) | 320.9       | 323.7 | 288.7  |
-| limiter (`DO_ALGO=1`)  | 373.4       | 456.8 | 377.6  |
-
-##### p99 latency (ms)
-
-| mode                   | uniform100k | zipf | single |
-|------------------------|-------------|------|--------|
-| baseline (`DO_ALGO=0`) | 15.9        | 19.5 | 2.1    |
-| limiter (`DO_ALGO=1`)  | 13.2        | 32.3 | 4.3    |
-
-### Fixed window
-
-```yaml
-store: "in_memory"
-use_algo: "fixed_window"
-algo_settings:
-  window_size: 60 # seconds
-  max_requests: 500
-backends:
-  in_memory:
-    default_ttl: 30 # seconds
-    eviction_time: 120 # seconds
-  redis:
-    addr: "redis:6379"
-    password: "PASS"
-    db: 0
-    default_ttl: 1000
-```
-
-#### Results
-
-##### p50 latency (µs)
-
-| mode                   | uniform100k | zipf  | single |
-|------------------------|-------------|-------|--------|
-| baseline (`DO_ALGO=0`) | 157.4       | 154.9 | 154.4  |
-| limiter (`DO_ALGO=1`)  | 156.1       | 162.8 | 164.4  |
-
-##### p95 latency (µs)
-
-| mode                   | uniform100k | zipf  | single |
-|------------------------|-------------|-------|--------|
-| baseline (`DO_ALGO=0`) | 332.5       | 295.3 | 290.2  |
-| limiter (`DO_ALGO=1`)  | 305.6       | 382.5 | 391.8  |
-
-##### p99 latency (ms)
-
-| mode                   | uniform100k | zipf | single |
-|------------------------|-------------|------|--------|
-| baseline (`DO_ALGO=0`) | 15.4        | 2.5  | 2      |
-| limiter (`DO_ALGO=1`)  | 1.8         | 7.1  | 16.1   |
-
-### Token bucket
-
-```yaml
-store: "in_memory"
-use_algo: "token_bucket"
-algo_settings:
-  capacity: 120 # tokens
-  rate: 2 # tokens per second
-backends:
-  in_memory:
-    default_ttl: 30 # seconds
-    eviction_time: 120 # seconds
-  redis:
-    addr: "redis:6379"
-    password: "PASS"
-    db: 0
-    default_ttl: 1000
-```
-
-#### Results
-
-##### p50 latency (µs)
-
-| mode                   | uniform100k | zipf  | single |
-|------------------------|-------------|-------|--------|
-| baseline (`DO_ALGO=0`) | 158.3       | 167.4 | 156.9  |
-| limiter (`DO_ALGO=1`)  | 158.8       | 161.4 | 163.5  |
-
-##### p95 latency (µs)
-
-| mode                   | uniform100k | zipf  | single |
-|------------------------|-------------|-------|--------|
-| baseline (`DO_ALGO=0`) | 320.2       | 917.8 | 319.0  |
-| limiter (`DO_ALGO=1`)  | 330.3       | 334.3 | 345.6  |
-
-##### p99 latency (ms)
-
-| mode                   | uniform100k | zipf | single |
-|------------------------|-------------|------|--------|
-| baseline (`DO_ALGO=0`) | 2.4         | 12.9 | 2.3    |
-| limiter (`DO_ALGO=1`)  | 4.5         | 2.8  | 2.5    |
