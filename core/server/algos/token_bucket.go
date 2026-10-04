@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
-	"qwrttqr-rate-limiter/core/server/internal/cache"
+	"qwrttqr-rate-limiter/core/server/cache"
 	"qwrttqr-rate-limiter/core/server/internal/config"
 	"strconv"
 	"sync"
@@ -33,6 +33,9 @@ func (tbl *TokenBucketLimiter) Configure() {
 }
 
 func ValidateTokenBucketConfig(cfg config.Configuration) error {
+	if *cfg.AlgoSettings.Rate <= 0 {
+		return fmt.Errorf("the rate param should be strictly greater then 0")
+	}
 	return CheckRequiredFields(cfg.AlgoSettings, []string{"capacity", "rate"})
 }
 
@@ -83,12 +86,15 @@ func (s *InMemoryBucketStore) TakeToken(
 	tokensRequired,
 	now,
 	capacity int64) (bool, int64, error) {
-	val := s.Cache.LoadOrStore(key, func() any {
-		return &BucketState{
-			Tokens:     capacity,
-			LastRefill: now,
-		}
-	})
+	val, err := s.Cache.Get(key)
+	if err != nil {
+		val = s.Cache.LoadOrStore(key, func() any {
+			return &BucketState{
+				Tokens:     capacity,
+				LastRefill: now,
+			}
+		})
+	}
 
 	bucket := val.(*BucketState)
 
@@ -105,7 +111,9 @@ func (s *InMemoryBucketStore) TakeToken(
 
 	if newTokens >= tokensRequired {
 		bucket.Tokens = newTokens - tokensRequired
-		bucket.LastRefill = now
+		if int64(refillTokens) > 0 {
+			bucket.LastRefill = now
+		}
 		return true, 0, nil
 	}
 	retryAfter := math.Ceil((float64(tokensRequired) - float64(newTokens)) / rate)

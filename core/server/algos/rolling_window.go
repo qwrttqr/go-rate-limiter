@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"qwrttqr-rate-limiter/core/server/internal/cache"
+	"qwrttqr-rate-limiter/core/server/cache"
 	"qwrttqr-rate-limiter/core/server/internal/config"
 	"strconv"
 	"sync"
@@ -14,7 +14,7 @@ import (
 )
 
 type RollingWindowStore interface {
-	CheckAndIncrement(ctx context.Context, key string, windowStart, windowSize, currentTime, maxRequests int64) (bool, int64, error)
+	CheckAndIncrement(ctx context.Context, key string, windowSize, maxRequests, now int64) (bool, int64, error)
 }
 type RollingWindowLimiter struct {
 	WindowSize  int64
@@ -32,6 +32,9 @@ func (rwl *RollingWindowLimiter) Configure() {
 }
 
 func ValidateRollingWindowConfiguration(cfg config.Configuration) error {
+	if *cfg.AlgoSettings.MaxRequests <= 0 {
+		return fmt.Errorf("the max requests param should be strictly greater then 0")
+	}
 	return CheckRequiredFields(cfg.AlgoSettings, []string{"window_size", "max_requests"})
 }
 
@@ -53,10 +56,9 @@ func (rwl *RollingWindowLimiter) LimitHTTP(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	currentTime := rwl.Now()
-	windowStart := currentTime - rwl.WindowSize
+	now := rwl.Now()
 
-	allowed, retryAfter, err := rwl.Store.CheckAndIncrement(r.Context(), parsedHeaders.ClientKey, windowStart, rwl.WindowSize, currentTime, rwl.MaxRequests)
+	allowed, retryAfter, err := rwl.Store.CheckAndIncrement(r.Context(), parsedHeaders.ClientKey, rwl.WindowSize, rwl.MaxRequests, now)
 	if err != nil {
 		http.Error(w, "rate limiter error", http.StatusInternalServerError)
 		return
@@ -80,15 +82,15 @@ type InMemoryRollingWindowStore struct {
 func (s *InMemoryRollingWindowStore) CheckAndIncrement(
 	_ context.Context,
 	key string,
-	windowStart,
-	_,
-	currentTime,
-	maxRequests int64) (bool, int64, error) {
-	val := s.Cache.LoadOrStore(key, func() any {
-		return &RollingWindowState{
-			Timestamps: make([]int64, 0, maxRequests*2),
-		}
-	})
+	windowSize,
+	maxRequests,
+	now int64) (bool, int64, error) {
+
+	val, err := s.Cache.Get(key)
+	if err != nil {
+		val = s.Cache.LoadOrStore(key, func() any { return &RollingWindowState{Timestamps: make([]int64, 0, 8)} })
+	}
+	windowStart := now - windowSize
 	window := val.(*RollingWindowState)
 
 	window.mu.Lock()
@@ -105,7 +107,7 @@ func (s *InMemoryRollingWindowStore) CheckAndIncrement(
 		window.Timestamps = window.Timestamps[:len(window.Timestamps)-i]
 	}
 	if int64(len(window.Timestamps)) < maxRequests {
-		window.Timestamps = append(window.Timestamps, currentTime)
+		window.Timestamps = append(window.Timestamps, now)
 		return true, 0, nil
 	}
 	retryAfter := window.Timestamps[0] - windowStart
@@ -118,16 +120,17 @@ type RedisRollingWindowStore struct {
 }
 
 var rollingWindowScript = redis.NewScript(`
-local windowStart = tonumber(ARGV[1])
-local windowSize = tonumber(ARGV[2])
-local currentTime = tonumber(ARGV[3])
-local maxRequests = tonumber(ARGV[4])
+local windowSize = tonumber(ARGV[1])
+local now = tonumber(ARGV[2])
+local maxRequests = tonumber(ARGV[3])
+
+local windowStart = now - windowSize
 
 redis.call("ZREMRANGEBYSCORE", KEYS[1], "-inf", windowStart)
 local count = redis.call("ZCARD", KEYS[1])
 
 if count < maxRequests then
-    redis.call("ZADD", KEYS[1], currentTime, currentTime)
+    redis.call("ZADD", KEYS[1], now, now)
     redis.call("EXPIRE", KEYS[1], windowSize)
     return {1, 0}
 else
@@ -137,8 +140,8 @@ else
 end
 `)
 
-func (s *RedisRollingWindowStore) CheckAndIncrement(ctx context.Context, key string, windowStart, windowSize, currentTime, maxRequests int64) (bool, int64, error) {
-	res, err := rollingWindowScript.Run(ctx, s.Client, []string{key}, windowStart, windowSize, currentTime, maxRequests).Int64Slice()
+func (s *RedisRollingWindowStore) CheckAndIncrement(ctx context.Context, key string, windowSize, maxRequests, now int64) (bool, int64, error) {
+	res, err := rollingWindowScript.Run(ctx, s.Client, []string{key}, windowSize, maxRequests, now).Int64Slice()
 	if err != nil {
 		return false, 0, err
 	}

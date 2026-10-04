@@ -2,12 +2,11 @@ package cache
 
 import (
 	"errors"
-	"fmt"
 	"sync"
 	"time"
 )
 
-const shardCount = 64
+const shardCount = 256
 const shardMask = shardCount - 1
 
 type shard struct {
@@ -22,9 +21,10 @@ type cacheEntry struct {
 
 type ShardedInMemoryCache struct {
 	shards         []*shard
-	commandChannel chan string
 	expirationTime int64
 	ticker         *time.Ticker
+	done           chan any
+	once           sync.Once
 }
 
 func (cache *ShardedInMemoryCache) getShard(key string) *shard {
@@ -89,8 +89,8 @@ func (cache *ShardedInMemoryCache) handleEviction() {
 	}
 }
 
-func (cache *ShardedInMemoryCache) sendCommand(cmd string) {
-	cache.commandChannel <- cmd
+func (cache *ShardedInMemoryCache) Close() {
+	cache.once.Do(func() { close(cache.done) })
 }
 
 func NewCache(expirationTime int64, evictionInterval time.Duration) *ShardedInMemoryCache {
@@ -98,21 +98,18 @@ func NewCache(expirationTime int64, evictionInterval time.Duration) *ShardedInMe
 	cache := &ShardedInMemoryCache{
 		shards:         make([]*shard, shardCount),
 		expirationTime: expirationTime,
-		commandChannel: make(chan string),
+		done:           make(chan any),
 		ticker:         ticker}
 	for i := range shardCount {
 		cache.shards[i] = &shard{entries: make(map[string]*cacheEntry)}
 	}
 	go func() {
+		defer ticker.Stop()
 		for {
 			select {
-			case cmd := <-cache.commandChannel:
-				if cmd == "stop" {
-					fmt.Println("cache ticker stopped, !!!eviction stopped!!!")
-					cache.ticker.Stop()
-					return
-				}
-			case <-cache.ticker.C:
+			case <-cache.done:
+				return
+			case <-ticker.C:
 				cache.handleEviction()
 			}
 		}

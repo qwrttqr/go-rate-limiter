@@ -5,6 +5,10 @@ import (
 	"testing"
 )
 
+func int64Ptr(n int64) *int64 {
+	return &n
+}
+
 func TestTokenBucket_logic(t *testing.T) {
 	tests := []struct {
 		name           string

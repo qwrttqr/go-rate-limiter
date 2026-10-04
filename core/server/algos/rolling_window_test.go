@@ -38,9 +38,8 @@ func TestRollingWindow_logic(t *testing.T) {
 			calls := int(tt.maxRequests)
 
 			for i := 0; i <= calls; i++ {
-				currentTime := rw.Now()
-				windowStart := currentTime - rw.WindowSize
-				allowed, _, err := rw.Store.CheckAndIncrement(context.Background(), tt.key, windowStart, rw.WindowSize, currentTime, rw.MaxRequests)
+				now := rw.Now()
+				allowed, _, err := rw.Store.CheckAndIncrement(context.Background(), tt.key, rw.WindowSize, rw.MaxRequests, now)
 				if err != nil {
 					t.Fatalf("call %d: unexpected error: %v", i, err)
 				}
@@ -67,9 +66,8 @@ func TestRollingWindow_window_moved(t *testing.T) {
 
 	ctx := context.Background()
 	hit := func() (bool, int64, error) {
-		currentTime := rw.Now()
-		windowStart := currentTime - rw.WindowSize
-		return rw.Store.CheckAndIncrement(ctx, "user-123", windowStart, rw.WindowSize, currentTime, rw.MaxRequests)
+		now := rw.Now()
+		return rw.Store.CheckAndIncrement(ctx, "user-123", rw.WindowSize, rw.MaxRequests, now)
 	}
 
 	for i := range 5 {
@@ -111,9 +109,8 @@ func TestRollingWindow_partial_slide(t *testing.T) {
 
 	ctx := context.Background()
 	hit := func() (bool, int64, error) {
-		currentTime := rw.Now()
-		windowStart := currentTime - rw.WindowSize
-		return rw.Store.CheckAndIncrement(ctx, "user-123", windowStart, rw.WindowSize, currentTime, rw.MaxRequests)
+		now := rw.Now()
+		return rw.Store.CheckAndIncrement(ctx, "user-123", rw.WindowSize, rw.MaxRequests, now)
 	}
 
 	for i := range 5 {

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"qwrttqr-rate-limiter/core/server/internal/cache"
+	"qwrttqr-rate-limiter/core/server/cache"
 	"qwrttqr-rate-limiter/core/server/internal/config"
 	"strconv"
 	"sync"
@@ -14,7 +14,7 @@ import (
 )
 
 type FixedWindowStore interface {
-	CheckAndIncrement(ctx context.Context, key string, windowStart, windowSize, maxRequests int64, now int64) (bool, int64, error)
+	CheckAndIncrement(ctx context.Context, key string, windowSize, maxRequests, now int64) (bool, int64, error)
 }
 type FixedWindowLimiter struct {
 	WindowSize  int64
@@ -32,7 +32,16 @@ func (fwl *FixedWindowLimiter) Configure() {
 }
 
 func ValidateFixedWindowConfig(cfg config.Configuration) error {
-	return CheckRequiredFields(cfg.AlgoSettings, []string{"window_size", "max_requests"})
+	if err := CheckRequiredFields(cfg.AlgoSettings, []string{"window_size", "max_requests"}); err != nil {
+		return err
+	}
+	if *cfg.AlgoSettings.MaxRequests <= 0 {
+		return fmt.Errorf("max_requests must be greater than 0")
+	}
+	if *cfg.AlgoSettings.WindowSize <= 0 { // assuming WindowSize is a pointer like MaxRequests
+		return fmt.Errorf("window_size must be greater than 0")
+	}
+	return nil
 }
 
 func NewFixedWindowStore(cfg config.Configuration, cacheInstance cache.Cache, redisClient *redis.Client) (FixedWindowStore, error) {
@@ -53,10 +62,8 @@ func (fwl *FixedWindowLimiter) LimitHTTP(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	now := fwl.Now()
-	currentWindow := now / fwl.WindowSize
-	windowStart := currentWindow * fwl.WindowSize
 
-	allowed, retryAfter, err := fwl.Store.CheckAndIncrement(r.Context(), body.ClientKey, windowStart, fwl.WindowSize, fwl.MaxRequests, now)
+	allowed, retryAfter, err := fwl.Store.CheckAndIncrement(r.Context(), body.ClientKey, fwl.WindowSize, fwl.MaxRequests, now)
 	if err != nil {
 		http.Error(w, "rate limiter error", http.StatusInternalServerError)
 		return
@@ -79,17 +86,16 @@ type FixedWindowState struct {
 
 func (s *InMemoryFixedWindowStore) CheckAndIncrement(
 	_ context.Context, key string,
-	windowStart,
 	windowSize,
 	maxRequests,
 	now int64,
 ) (bool, int64, error) {
-	val := s.Cache.LoadOrStore(key, func() any {
-		return &FixedWindowState{
-			Count:        0,
-			StoredWindow: windowStart,
-		}
-	})
+	windowStart := (now / windowSize) * windowSize
+
+	val, err := s.Cache.Get(key)
+	if err != nil {
+		val = s.Cache.LoadOrStore(key, func() any { return &FixedWindowState{StoredWindow: windowStart} })
+	}
 	window := val.(*FixedWindowState)
 
 	window.mu.Lock()
@@ -120,28 +126,27 @@ var fixedWindowScript = redis.NewScript(`
 local stored = redis.call("HMGET", KEYS[1], "window", "count")
 local storedWindow = tonumber(stored[1])
 local count = tonumber(stored[2]) or 0
-local windowStart = tonumber(ARGV[1])
-local windowSize = tonumber(ARGV[2])
-local maxRequests = tonumber(ARGV[3])
-local now = tonumber(ARGV[4])
+local windowSize = tonumber(ARGV[1])
+local maxRequests = tonumber(ARGV[2])
+local now = tonumber(ARGV[3])
+
+local windowStart = math.floor(now / windowSize) * windowSize
 
 if storedWindow == nil or storedWindow < windowStart then
-	count = 0
-	storedWindow = windowStart
+    count = 0
+    storedWindow = windowStart
 end
-local retryAfter = (windowStart + windowSize) - now 
+
 if count < maxRequests then
-	count = count + 1
-	redis.call("HMSET", KEYS[1], "window", storedWindow, "count", count)
-	redis.call("EXPIRE", KEYS[1], windowSize)
-	return {1, 0}
-else 
-	return {0, retryAfter}
+    redis.call("HSET", KEYS[1], "window", storedWindow, "count", count + 1)
+    redis.call("EXPIRE", KEYS[1], windowSize)
+    return {1, 0}
 end
+return {0, windowStart + windowSize - now}
 `)
 
-func (s *RedisFixedWindowStore) CheckAndIncrement(ctx context.Context, key string, windowStart, windowSize, maxRequests, now int64) (bool, int64, error) {
-	res, err := fixedWindowScript.Run(ctx, s.Client, []string{key}, windowStart, windowSize, maxRequests, now).Int64Slice()
+func (s *RedisFixedWindowStore) CheckAndIncrement(ctx context.Context, key string, windowSize, maxRequests, now int64) (bool, int64, error) {
+	res, err := fixedWindowScript.Run(ctx, s.Client, []string{key}, windowSize, maxRequests, now).Int64Slice()
 	if err != nil {
 		return false, 0, err
 	}

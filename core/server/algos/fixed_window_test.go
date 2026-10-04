@@ -38,11 +38,7 @@ func TestFixedWindow_logic(t *testing.T) {
 			calls := int(tt.maxRequests)
 
 			for i := 0; i <= calls; i++ {
-				currentTime := fw.Now()
-				currentWindow := currentTime / fw.WindowSize
-				windowStart := currentWindow * fw.WindowSize
-
-				allowed, _, err := fw.Store.CheckAndIncrement(context.Background(), tt.key, windowStart, fw.WindowSize, fw.MaxRequests, 1000)
+				allowed, _, err := fw.Store.CheckAndIncrement(context.Background(), tt.key, fw.WindowSize, fw.MaxRequests, 1000)
 				if err != nil {
 					t.Fatalf("call %d: unexpected error: %v", i, err)
 				}
@@ -69,10 +65,7 @@ func TestFixedWindow_new_window(t *testing.T) {
 
 	ctx := context.Background()
 	hit := func() (bool, int64, error) {
-		currentTime := fw.Now()
-		currentWindow := currentTime / fw.WindowSize
-		windowStart := currentWindow * fw.WindowSize
-		return fw.Store.CheckAndIncrement(ctx, "user-123", windowStart, fw.WindowSize, fw.MaxRequests, 1000)
+		return fw.Store.CheckAndIncrement(ctx, "user-123", fw.WindowSize, fw.MaxRequests, fakeNow)
 	}
 
 	for i := range 5 {
@@ -117,10 +110,7 @@ func TestFixedWindow_same_window(t *testing.T) {
 
 	ctx := context.Background()
 	hit := func() (bool, int64, error) {
-		currentTime := fw.Now()
-		currentWindow := currentTime / fw.WindowSize
-		windowStart := currentWindow * fw.WindowSize
-		return fw.Store.CheckAndIncrement(ctx, "user-123", windowStart, fw.WindowSize, fw.MaxRequests, 1000)
+		return fw.Store.CheckAndIncrement(ctx, "user-123", fw.WindowSize, fw.MaxRequests, fakeNow)
 	}
 
 	for i := range 5 {
