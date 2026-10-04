@@ -3,17 +3,17 @@
 This is the implementation of [arxiv2602.11741](https://arxiv.org/pdf/2602.11741) rate limiters approaches and
 algorithms.
 
-## What already done
-
-1. In memory auto-evicting cache
-2. All rate-limiting algos present in the paper are recreated with in_memory style
+In-memory cache is implemented as sharded cache on default golang map with mutexes.
 
 ## What will be done
 
-1. Distributed state control via etcd.
-2. Admin part with limiting statistic in PostgreSQL
-3. Ability to use this rate-limiter as middleware in your service
-4. Support of gRPC
+1. Admin part with limiting statistic in PostgreSQL
+2. Ability to use this rate-limiter as middleware in your service
+3. Support of gRPC
+
+## What i am still thinking to add
+
+1. Support of etcd and other distributed data stores
 
 ## How to use
 
