@@ -34,7 +34,6 @@ func TestFixedWindow_logic(t *testing.T) {
 				MaxRequests: tt.maxRequests,
 				Store:       store,
 			}
-			fw.Configure()
 			calls := int(tt.maxRequests)
 
 			for i := 0; i <= calls; i++ {
@@ -61,7 +60,6 @@ func TestFixedWindow_new_window(t *testing.T) {
 		Store:       store,
 		Now:         func() int64 { return fakeNow },
 	}
-	fw.Configure()
 
 	ctx := context.Background()
 	hit := func() (bool, int64, error) {
@@ -106,7 +104,6 @@ func TestFixedWindow_same_window(t *testing.T) {
 		Store:       store,
 		Now:         func() int64 { return fakeNow },
 	}
-	fw.Configure()
 
 	ctx := context.Background()
 	hit := func() (bool, int64, error) {

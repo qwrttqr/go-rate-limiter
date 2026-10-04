@@ -19,6 +19,8 @@ algorithms.
 
 ### Configuration
 
+#### As standalone service
+
 The service contains one small config file (create your own `config.yaml`):
 
 ```yaml
@@ -31,6 +33,7 @@ backends:
   in_memory:
     default_ttl: 10 # seconds
     eviction_time: 15 # seconds
+    shards: 256
   redis:
     addr: "redis:6379"
     password: "pass"
@@ -38,13 +41,23 @@ backends:
     default_ttl: 1000
 ```
 
-- The `store` key is responsible for storage type will be used. Possible options: `in_memoty`, `redis`, `etcd`.
+- The `store` key is responsible for storage type will be used. Possible options: `in_memory`, `redis`, `etcd`.
 - `use_algo` key is responsible for used algo. Possible options `rolling_window`, `token_bucket`, `fixed_window`.
 - `cache_settings` allows you to control cache expiration time and (in case of in_memory cache) cache keys eviction
   intervals.
 - `algo_settings` key is responsible for configuration for algo:
     - use `window_size` and `max_requests` for `rolling_window` and `fixed_window` algorithms.
     - use `capacity` and `rate`(per second) for `token_bucket` algo.
+- `backend` is responsible for backends configuration:
+    - `in_memory` is configuration for in-memory cache:
+        - `default_ttl` is default TTL for a key, when cache is touched the TTL is updated.
+        - `eviction_time` is time interval in what cache eviction is fired.
+        - `shards` is shards count for cache, **KEEP IT AS POWER OF 2**.
+    - `redis` is configuration for Redis storage:
+        - `addr` is Redis address.
+        - `password` is Redis password.
+        - `db` DB index inside Redis.
+        - `default_ttl`: is a default TTL for Redis cache items.
 
 Then use `http<s>://<your_host:port>/limit` - for limiting by HTTP.
 
@@ -58,6 +71,12 @@ And then run `docker run --rm -p 8080:8080 <image-name>`.
 ## Benchmarks
 
 You can run bench on your own machine with `make bench COUNT=<N> cPUS=<M>`
+
+Benchmarks simulates 3 scenarios:
+
+1. One single hot key.
+2. Uniform distribution for count of requests between keys.
+3. Zipf distribution - some keys gets many requests and becoming hot keys, other gets small count.
 
 The benches:
 

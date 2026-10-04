@@ -4,10 +4,8 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"net/http"
 	"qwrttqr-rate-limiter/core/server/cache"
-	"qwrttqr-rate-limiter/core/server/internal/config"
-	"strconv"
+	"qwrttqr-rate-limiter/core/server/internal"
 	"sync"
 	"time"
 
@@ -32,14 +30,14 @@ func (tbl *TokenBucketLimiter) Configure() {
 	}
 }
 
-func ValidateTokenBucketConfig(cfg config.Configuration) error {
+func ValidateTokenBucketConfig(cfg internal.Configuration) error {
 	if *cfg.AlgoSettings.Rate <= 0 {
 		return fmt.Errorf("the rate param should be strictly greater then 0")
 	}
 	return CheckRequiredFields(cfg.AlgoSettings, []string{"capacity", "rate"})
 }
 
-func NewTokenBucketStore(cfg config.Configuration, cacheInstance cache.Cache, redisClient *redis.Client) (TokenBucketStore, error) {
+func NewTokenBucketStore(cfg internal.Configuration, cacheInstance cache.Cache, redisClient *redis.Client) (TokenBucketStore, error) {
 	switch cfg.Store {
 	case "in_memory":
 		return &InMemoryBucketStore{Cache: cacheInstance}, nil
@@ -50,23 +48,22 @@ func NewTokenBucketStore(cfg config.Configuration, cacheInstance cache.Cache, re
 	}
 }
 
-func (tbl *TokenBucketLimiter) LimitHTTP(w http.ResponseWriter, r *http.Request) {
-	parsedHeaders, err := ReadIncomingHeader(r)
+func (tbl *TokenBucketLimiter) Allow(ctx context.Context, req Request) (Decision, error) {
+	if err := req.validate(); err != nil {
+		return Decision{}, err
+	}
+	allowed, retryAfter, err := tbl.Store.TakeToken(
+		ctx,
+		req.Key,
+		tbl.Rate,
+		req.RequiredTokens,
+		tbl.Now(),
+		tbl.Capacity,
+	)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		return Decision{}, err
 	}
-	var requiredTokens int64 = 1
-	allowed, retryAfter, err := tbl.Store.TakeToken(r.Context(), parsedHeaders.ClientKey, tbl.Rate, requiredTokens, tbl.Now(), tbl.Capacity)
-	if err != nil {
-		http.Error(w, "rate limiter error", http.StatusInternalServerError)
-		return
-	}
-	if !allowed {
-		w.Header().Set("Retry-After", strconv.FormatInt(retryAfter, 10))
-		http.Error(w, "rate limit exceeded", http.StatusTooManyRequests)
-		return
-	}
+	return Decision{Allowed: allowed, RetryAfter: retryAfter}, nil
 }
 
 type InMemoryBucketStore struct {

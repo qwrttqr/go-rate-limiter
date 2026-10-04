@@ -2,11 +2,11 @@ package algos
 
 import (
 	"fmt"
-	"qwrttqr-rate-limiter/core/server/internal/config"
+	"qwrttqr-rate-limiter/core/server/internal"
 	"reflect"
 )
 
-func CheckRequiredFields(cfg config.AlgoSettings, requiredTags []string) error {
+func CheckRequiredFields(cfg internal.AlgoSettings, requiredTags []string) error {
 	value := reflect.ValueOf(cfg)
 	type_ := reflect.TypeOf(cfg)
 

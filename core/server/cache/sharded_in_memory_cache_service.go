@@ -6,9 +6,6 @@ import (
 	"time"
 )
 
-const shardCount = 256
-const shardMask = shardCount - 1
-
 type shard struct {
 	mu      sync.Mutex
 	entries map[string]*cacheEntry
@@ -21,6 +18,7 @@ type cacheEntry struct {
 
 type ShardedInMemoryCache struct {
 	shards         []*shard
+	shardsCount    uint32
 	expirationTime int64
 	ticker         *time.Ticker
 	done           chan any
@@ -33,7 +31,7 @@ func (cache *ShardedInMemoryCache) getShard(key string) *shard {
 		h ^= uint32(key[i])
 		h *= 16777619
 	}
-	return cache.shards[h&shardMask]
+	return cache.shards[h&(cache.shardsCount-1)]
 }
 
 func (cache *ShardedInMemoryCache) Store(key string, value any) {
@@ -89,17 +87,25 @@ func (cache *ShardedInMemoryCache) handleEviction() {
 	}
 }
 
-func (cache *ShardedInMemoryCache) Close() {
+func (cache *ShardedInMemoryCache) Close() error {
 	cache.once.Do(func() { close(cache.done) })
+	return nil
 }
 
-func NewCache(expirationTime int64, evictionInterval time.Duration) *ShardedInMemoryCache {
+func NewCache(
+	expirationTime int64,
+	evictionInterval time.Duration,
+	shardCount uint32,
+) *ShardedInMemoryCache {
 	ticker := time.NewTicker(evictionInterval)
 	cache := &ShardedInMemoryCache{
 		shards:         make([]*shard, shardCount),
+		shardsCount:    shardCount,
 		expirationTime: expirationTime,
 		done:           make(chan any),
-		ticker:         ticker}
+		ticker:         ticker,
+	}
+
 	for i := range shardCount {
 		cache.shards[i] = &shard{entries: make(map[string]*cacheEntry)}
 	}

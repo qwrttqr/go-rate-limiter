@@ -3,10 +3,8 @@ package algos
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"qwrttqr-rate-limiter/core/server/cache"
-	"qwrttqr-rate-limiter/core/server/internal/config"
-	"strconv"
+	"qwrttqr-rate-limiter/core/server/internal"
 	"sync"
 	"time"
 
@@ -31,14 +29,14 @@ func (rwl *RollingWindowLimiter) Configure() {
 	}
 }
 
-func ValidateRollingWindowConfiguration(cfg config.Configuration) error {
+func ValidateRollingWindowConfiguration(cfg internal.Configuration) error {
 	if *cfg.AlgoSettings.MaxRequests <= 0 {
 		return fmt.Errorf("the max requests param should be strictly greater then 0")
 	}
 	return CheckRequiredFields(cfg.AlgoSettings, []string{"window_size", "max_requests"})
 }
 
-func NewRollingWindowStore(cfg config.Configuration, cacheInstance cache.Cache, redisClient *redis.Client) (RollingWindowStore, error) {
+func NewRollingWindowStore(cfg internal.Configuration, cacheInstance cache.Cache, redisClient *redis.Client) (RollingWindowStore, error) {
 	switch cfg.Store {
 	case "in_memory":
 		return &InMemoryRollingWindowStore{Cache: cacheInstance}, nil
@@ -49,25 +47,16 @@ func NewRollingWindowStore(cfg config.Configuration, cacheInstance cache.Cache, 
 	}
 }
 
-func (rwl *RollingWindowLimiter) LimitHTTP(w http.ResponseWriter, r *http.Request) {
-	parsedHeaders, err := ReadIncomingHeader(r)
+func (rwl *RollingWindowLimiter) Allow(ctx context.Context, req Request) (Decision, error) {
+	if err := req.validate(); err != nil {
+		return Decision{}, err
+	}
+	allowed, retryAfter, err := rwl.Store.CheckAndIncrement(
+		ctx, req.Key, rwl.WindowSize, rwl.MaxRequests, rwl.Now())
 	if err != nil {
-		http.Error(w, "rate limiter error", http.StatusInternalServerError)
-		return
+		return Decision{}, err
 	}
-
-	now := rwl.Now()
-
-	allowed, retryAfter, err := rwl.Store.CheckAndIncrement(r.Context(), parsedHeaders.ClientKey, rwl.WindowSize, rwl.MaxRequests, now)
-	if err != nil {
-		http.Error(w, "rate limiter error", http.StatusInternalServerError)
-		return
-	}
-	if !allowed {
-		w.Header().Set("Retry-After", strconv.FormatInt(retryAfter, 10))
-		http.Error(w, "rate limit exceeded", http.StatusTooManyRequests)
-		return
-	}
+	return Decision{Allowed: allowed, RetryAfter: retryAfter}, nil
 }
 
 type RollingWindowState struct {

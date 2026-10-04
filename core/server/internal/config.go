@@ -1,4 +1,4 @@
-package config
+package internal
 
 import (
 	"fmt"
@@ -20,8 +20,9 @@ type Backends struct {
 }
 
 type InMemoryBackendSettings struct {
-	DefaultTtl   int64 `yaml:"default_ttl"`
-	EvictionTime int64 `yaml:"eviction_time"`
+	DefaultTtl   int64  `yaml:"default_ttl"`
+	EvictionTime int64  `yaml:"eviction_time"`
+	ShardsCount  uint32 `yaml:"shards_count"`
 }
 
 type RedisBackendSettings struct {

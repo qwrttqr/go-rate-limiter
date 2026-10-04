@@ -1,25 +1,51 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"log"
 	"net/http"
-	"qwrttqr-rate-limiter/core/server/handlers"
+	"os"
+	"os/signal"
+	"qwrttqr-rate-limiter/core/server/facade"
 	"qwrttqr-rate-limiter/core/server/limiting"
+	"syscall"
+	"time"
 )
 
 func main() {
-	http.HandleFunc("GET /health", handlers.HealthHandler)
-	http.HandleFunc("GET /getConfig", handlers.ParseConfig)
-
-	rateLimiter, err := limiting.NewRateLimiter()
-	if err != nil {
-		log.Fatalf("failed to create rate limiter: %v", err)
+	if err := run(); err != nil {
+		log.Fatal(err)
 	}
-	rateLimiter.Configure()
+}
 
-	http.HandleFunc("POST /limit", rateLimiter.LimitHTTP)
+func run() error {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
-	addr := ":8080"
-	log.Printf("listening on %s", addr)
-	log.Fatal(http.ListenAndServe(addr, nil))
+	rl, err := limiting.NewRateLimiter()
+	if err != nil {
+		return fmt.Errorf("create rate limiter: %w", err)
+	}
+	defer rl.Close()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /health", facade.HealthHandler)
+	mux.HandleFunc("POST /limit", facade.LimitHandler(rl))
+
+	srv := &http.Server{Addr: ":8080", Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- srv.ListenAndServe() }()
+	log.Printf("listening on %s", srv.Addr)
+
+	select {
+	case err := <-errCh:
+		return err
+	case <-ctx.Done():
+	}
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return srv.Shutdown(shutdownCtx)
 }

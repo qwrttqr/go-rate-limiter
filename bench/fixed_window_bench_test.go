@@ -62,8 +62,8 @@ func BenchmarkFixedWindow(b *testing.B) {
 	for _, w := range workloads {
 		for _, p := range paths {
 			b.Run(w.name+"/"+p.name, func(b *testing.B) {
-				c := cache.NewCache(60, time.Minute)
-				b.Cleanup(c.Close)
+				c := cache.NewCache(60, time.Minute, 256)
+				b.Cleanup(func() { _ = c.Close() })
 				store := &algos.InMemoryFixedWindowStore{Cache: c}
 				benchFixedWindow(b, store, w.nKeys, w.zipf, p.maxRequests, p.wantAllowed)
 			})

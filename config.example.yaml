@@ -7,6 +7,7 @@ backends:
   in_memory:
     default_ttl: 10 # seconds
     eviction_time: 15 # seconds
+    shards_count: 256
   redis:
     addr: "redis:6379"
     password: "m1re1di$$sss"

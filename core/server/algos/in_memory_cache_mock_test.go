@@ -52,8 +52,9 @@ func (m *shardedInMemoryCacheMock) Delete(key string) {
 	delete(m.store, key)
 }
 
-func (m *shardedInMemoryCacheMock) Close() {
+func (m *shardedInMemoryCacheMock) Close() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.calls = append(m.calls, "close")
+	return nil
 }

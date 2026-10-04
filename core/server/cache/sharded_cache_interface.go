@@ -5,4 +5,5 @@ type Cache interface {
 	Get(key string) (any, error)
 	LoadOrStore(key string, create func() any) any
 	Delete(key string)
+	Close() error
 }

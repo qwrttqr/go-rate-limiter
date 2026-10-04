@@ -3,12 +3,9 @@ package algos
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"qwrttqr-rate-limiter/core/server/cache"
-	"qwrttqr-rate-limiter/core/server/internal/config"
-	"strconv"
+	"qwrttqr-rate-limiter/core/server/internal"
 	"sync"
-	"time"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -23,28 +20,20 @@ type FixedWindowLimiter struct {
 	Now         func() int64
 }
 
-func (fwl *FixedWindowLimiter) Configure() {
-	if fwl.Now == nil {
-		fwl.Now = func() int64 {
-			return time.Now().Unix()
-		}
-	}
-}
-
-func ValidateFixedWindowConfig(cfg config.Configuration) error {
+func ValidateFixedWindowConfig(cfg internal.Configuration) error {
 	if err := CheckRequiredFields(cfg.AlgoSettings, []string{"window_size", "max_requests"}); err != nil {
 		return err
 	}
 	if *cfg.AlgoSettings.MaxRequests <= 0 {
 		return fmt.Errorf("max_requests must be greater than 0")
 	}
-	if *cfg.AlgoSettings.WindowSize <= 0 { // assuming WindowSize is a pointer like MaxRequests
+	if *cfg.AlgoSettings.WindowSize <= 0 {
 		return fmt.Errorf("window_size must be greater than 0")
 	}
 	return nil
 }
 
-func NewFixedWindowStore(cfg config.Configuration, cacheInstance cache.Cache, redisClient *redis.Client) (FixedWindowStore, error) {
+func NewFixedWindowStore(cfg internal.Configuration, cacheInstance cache.Cache, redisClient *redis.Client) (FixedWindowStore, error) {
 	switch cfg.Store {
 	case "in_memory":
 		return &InMemoryFixedWindowStore{Cache: cacheInstance}, nil
@@ -55,24 +44,16 @@ func NewFixedWindowStore(cfg config.Configuration, cacheInstance cache.Cache, re
 	}
 }
 
-func (fwl *FixedWindowLimiter) LimitHTTP(w http.ResponseWriter, r *http.Request) {
-	body, err := ReadIncomingHeader(r)
+func (fwl *FixedWindowLimiter) Allow(ctx context.Context, req Request) (Decision, error) {
+	if err := req.validate(); err != nil {
+		return Decision{}, err
+	}
+	allowed, retryAfter, err := fwl.Store.CheckAndIncrement(
+		ctx, req.Key, fwl.WindowSize, fwl.MaxRequests, fwl.Now())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		return Decision{}, err
 	}
-	now := fwl.Now()
-
-	allowed, retryAfter, err := fwl.Store.CheckAndIncrement(r.Context(), body.ClientKey, fwl.WindowSize, fwl.MaxRequests, now)
-	if err != nil {
-		http.Error(w, "rate limiter error", http.StatusInternalServerError)
-		return
-	}
-	if !allowed {
-		w.Header().Set("Retry-After", strconv.FormatInt(retryAfter, 10))
-		http.Error(w, "rate limit exceeded", http.StatusTooManyRequests)
-		return
-	}
+	return Decision{Allowed: allowed, RetryAfter: retryAfter}, nil
 }
 
 type InMemoryFixedWindowStore struct {
@@ -84,7 +65,7 @@ type FixedWindowState struct {
 	StoredWindow int64
 }
 
-func (s *InMemoryFixedWindowStore) CheckAndIncrement(
+func (store *InMemoryFixedWindowStore) CheckAndIncrement(
 	_ context.Context, key string,
 	windowSize,
 	maxRequests,
@@ -92,9 +73,9 @@ func (s *InMemoryFixedWindowStore) CheckAndIncrement(
 ) (bool, int64, error) {
 	windowStart := (now / windowSize) * windowSize
 
-	val, err := s.Cache.Get(key)
+	val, err := store.Cache.Get(key)
 	if err != nil {
-		val = s.Cache.LoadOrStore(key, func() any { return &FixedWindowState{StoredWindow: windowStart} })
+		val = store.Cache.LoadOrStore(key, func() any { return &FixedWindowState{StoredWindow: windowStart} })
 	}
 	window := val.(*FixedWindowState)
 
@@ -110,10 +91,7 @@ func (s *InMemoryFixedWindowStore) CheckAndIncrement(
 		return true, 0, nil
 	}
 
-	timeToNextWindow := (window.StoredWindow + windowSize) - now
-	if timeToNextWindow < 0 {
-		timeToNextWindow = 0
-	}
+	timeToNextWindow := max((window.StoredWindow+windowSize)-now, 0)
 
 	return false, timeToNextWindow, nil
 }
