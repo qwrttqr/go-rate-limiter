@@ -9,13 +9,146 @@ In-memory cache is implemented as sharded cache on default golang map with mutex
 
 1. Admin part with limiting statistic in PostgreSQL
 2. Ability to use this rate-limiter as middleware in your service
-3. Support of gRPC
 
 ## What i am still thinking to add
 
 1. Support of etcd and other distributed data stores
 
-## How to use
+## Usage modes
+
+The limiter can run in two ways:
+
+| Mode                        | When to use                                                         | Who decides the key           |
+|-----------------------------|---------------------------------------------------------------------|-------------------------------|
+| **Standalone service**      | Several services share one limiter, or you want it outside your app | The caller sends the key      |
+| **Middleware (Go library)** | One Go app, no extra network hop                                    | Your code, via a key function |
+
+## Standalone service
+
+### Configuration
+
+The service is configured only through `config.yaml`. Create your own:
+
+```yaml
+store: "in_memory"
+use_algo: "token_bucket"
+algo_settings:
+  capacity: 10
+  rate: 0.5            # tokens per second
+backends:
+  in_memory:
+    default_ttl: 10
+    eviction_time: 15
+    shards: 256
+```
+
+List of config:
+
+- The `store` key is responsible for storage type will be used. Possible options: `in_memory`, `redis`, `etcd`.
+- `use_algo` key is responsible for used algo. Possible options `rolling_window`, `token_bucket`, `fixed_window`.
+- `cache_settings` allows you to control cache expiration time and (in case of in_memory cache) cache keys eviction
+  intervals.
+- `algo_settings` key is responsible for configuration for algo:
+    - use `window_size` and `max_requests` for `rolling_window` and `fixed_window` algorithms.
+    - use `capacity` and `rate`(per second) for `token_bucket` algo.
+- `backend` is responsible for backends configuration:
+    - `in_memory` is configuration for in-memory cache:
+        - `default_ttl` is default TTL for a key, when cache is touched the TTL is updated.
+        - `eviction_time` is time interval in what cache eviction is fired.
+        - `shards` is shards count for cache, **KEEP IT AS POWER OF 2**.
+    - `redis` is configuration for Redis storage:
+        - `addr` is Redis address.
+        - `password` is Redis password.
+        - `db` DB index inside Redis.
+        - `default_ttl`: is a default TTL for Redis cache items.
+
+### Run
+
+```bash
+docker build -t qwrttqr-rate-limiter .
+docker run --rm -p 8080:8080 -p 9090:9090 qwrttqr-rate-limiter
+```
+
+| Port | Protocol |
+|------|----------|
+| 8080 | HTTP     |
+| 9090 | gRPC     |
+
+> The standalone service trusts the caller to send the key and the token cost.
+> Run it inside a private network and do not expose it to the internet.
+
+### HTTP API
+
+`POST /limit`
+
+| Header              | Required | Description                                                    |
+|---------------------|----------|----------------------------------------------------------------|
+| `X-Client-Key`      | yes      | The identity to limit (for example `user:42` or `ip:1.2.3.4`). |
+| `X-Required-Tokens` | no       | Request cost. Default `1`. Must be greater than 0.             |
+
+| Status | Meaning                                                             |
+|--------|---------------------------------------------------------------------|
+| `200`  | Allowed                                                             |
+| `429`  | Limit exceeded. The `Retry-After` header holds the seconds to wait. |
+| `400`  | Invalid key or token header                                         |
+| `500`  | Limiter backend failure                                             |
+
+```bash
+curl -i -X POST http://localhost:8080/limit -H "X-Client-Key: user:42"
+```
+
+`GET /health` returns `200 ok`.
+
+### gRPC API
+
+The contract is in [`proto/ratelimiter/v1/ratelimiter.proto`](proto/ratelimiter/v1/ratelimiter.proto).
+Generated Go code is committed in `gen/`.
+
+```proto
+service RateLimiter {
+  rpc Allow(AllowRequest) returns (AllowResponse);
+}
+```
+
+| Field                       | Description                                                |
+|-----------------------------|------------------------------------------------------------|
+| `AllowRequest.key`          | Identity to limit.                                         |
+| `AllowRequest.tokens`       | Request cost. `0` (unset) means 1. Must be positive.       |
+| `AllowResponse.allowed`     | Whether the request may proceed.                           |
+| `AllowResponse.retry_after` | How long to wait. Only meaningful when `allowed` is false. |
+
+A denial is a normal response with `allowed = false`, not an error. Errors mean:
+
+| gRPC code          | Meaning                    |
+|--------------------|----------------------------|
+| `INVALID_ARGUMENT` | Empty  key, invalid tokens |
+| `UNAVAILABLE`      | Limiter backend failure    |
+
+Example with grpcurl:
+
+```bash
+grpcurl -plaintext -import-path proto -proto ratelimiter/v1/ratelimiter.proto \
+  -d '{"key":"user:42"}' localhost:9090 ratelimiter.v1.RateLimiter/Allow
+```
+
+Go client:
+
+```go
+conn, _ := grpc.NewClient("localhost:9090", grpc.WithTransportCredentials(insecure.NewCredentials()))
+defer conn.Close()
+
+c := ratelimiterv1.NewRateLimiterClient(conn)
+resp, err := c.Allow(ctx, &ratelimiterv1.AllowRequest{Key: "user:42"})
+if err == nil && !resp.GetAllowed() {
+time.Sleep(resp.GetRetryAfter().AsDuration())
+}
+```
+
+For other languages, generate a client from the `.proto` file.
+
+## Middleware (Go library)
+
+> Soon.
 
 ### Configuration
 
@@ -40,24 +173,6 @@ backends:
     db: 0
     default_ttl: 1000
 ```
-
-- The `store` key is responsible for storage type will be used. Possible options: `in_memory`, `redis`, `etcd`.
-- `use_algo` key is responsible for used algo. Possible options `rolling_window`, `token_bucket`, `fixed_window`.
-- `cache_settings` allows you to control cache expiration time and (in case of in_memory cache) cache keys eviction
-  intervals.
-- `algo_settings` key is responsible for configuration for algo:
-    - use `window_size` and `max_requests` for `rolling_window` and `fixed_window` algorithms.
-    - use `capacity` and `rate`(per second) for `token_bucket` algo.
-- `backend` is responsible for backends configuration:
-    - `in_memory` is configuration for in-memory cache:
-        - `default_ttl` is default TTL for a key, when cache is touched the TTL is updated.
-        - `eviction_time` is time interval in what cache eviction is fired.
-        - `shards` is shards count for cache, **KEEP IT AS POWER OF 2**.
-    - `redis` is configuration for Redis storage:
-        - `addr` is Redis address.
-        - `password` is Redis password.
-        - `db` DB index inside Redis.
-        - `default_ttl`: is a default TTL for Redis cache items.
 
 Then use `http<s>://<your_host:port>/limit` - for limiting by HTTP.
 
@@ -159,4 +274,5 @@ BenchmarkTokenBucket/zipf_100k/deny-4                   26432766                
 BenchmarkTokenBucket/zipf_100k/deny-8                   21224098                54.54 ns/op            0 B/op          0 allocs/op
 BenchmarkTokenBucket/zipf_100k/deny-12                  21434962                56.57 ns/op            0 B/op          0 allocs/op
 ```
+
 
