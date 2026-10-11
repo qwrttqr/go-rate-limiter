@@ -45,9 +45,6 @@ func NewFixedWindowStore(cfg internal.Configuration, cacheInstance cache.Cache, 
 }
 
 func (fwl *FixedWindowLimiter) Allow(ctx context.Context, req Request) (Decision, error) {
-	if err := req.validate(); err != nil {
-		return Decision{}, err
-	}
 	allowed, retryAfter, err := fwl.Store.CheckAndIncrement(
 		ctx, req.Key, fwl.WindowSize, fwl.MaxRequests, fwl.Now())
 	if err != nil {

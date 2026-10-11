@@ -1,0 +1,18 @@
+syntax = "proto3";
+package ratelimiter.v1;
+option go_package = "qwrttqr-rate-limiter/gen/ratelimiter/v1;ratelimiterv1";
+import "google/protobuf/duration.proto";
+
+service RateLimiter {
+  rpc Allow(AllowRequest) returns (AllowResponse);
+}
+
+message AllowRequest {
+  string key  = 1;
+  double tokens = 2;
+}
+
+message AllowResponse {
+  bool allowed = 1;
+  google.protobuf.Duration retryAfter = 2;
+}

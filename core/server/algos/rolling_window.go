@@ -48,9 +48,6 @@ func NewRollingWindowStore(cfg internal.Configuration, cacheInstance cache.Cache
 }
 
 func (rwl *RollingWindowLimiter) Allow(ctx context.Context, req Request) (Decision, error) {
-	if err := req.validate(); err != nil {
-		return Decision{}, err
-	}
 	allowed, retryAfter, err := rwl.Store.CheckAndIncrement(
 		ctx, req.Key, rwl.WindowSize, rwl.MaxRequests, rwl.Now())
 	if err != nil {

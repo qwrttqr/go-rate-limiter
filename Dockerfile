@@ -4,9 +4,10 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY config.yaml ./config.yaml
 COPY core/ ./core/
+COPY gen/ ./gen/
 RUN CGO_ENABLED=0 GOOS=linux go build -o /qwrttqr-rate-limiter ./core/cmd
 FROM alpine:3.20 AS runner
 COPY --from=builder /qwrttqr-rate-limiter /
 COPY --from=builder /app/config.yaml /config.yaml
-EXPOSE 8080
+EXPOSE 8080 8081
 CMD ["/qwrttqr-rate-limiter"]

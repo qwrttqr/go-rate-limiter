@@ -4,13 +4,17 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"qwrttqr-rate-limiter/core/server/facade"
 	"qwrttqr-rate-limiter/core/server/limiting"
+	ratelimiterv1 "qwrttqr-rate-limiter/gen/ratelimiter/v1"
 	"syscall"
 	"time"
+
+	"google.golang.org/grpc"
 )
 
 func main() {
@@ -33,11 +37,16 @@ func run() error {
 	mux.HandleFunc("GET /health", facade.HealthHandler)
 	mux.HandleFunc("POST /limit", facade.LimitHandler(rl))
 
-	srv := &http.Server{Addr: ":8080", Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+	httpSrv := &http.Server{Addr: ":8080", Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+	grpcSrv := grpc.NewServer()
+	ratelimiterv1.RegisterRateLimiterServer(grpcSrv, facade.NewGRPCServer(rl))
 
-	errCh := make(chan error, 1)
-	go func() { errCh <- srv.ListenAndServe() }()
-	log.Printf("listening on %s", srv.Addr)
+	tcpLis, err := net.Listen("tcp", ":8081")
+	errCh := make(chan error, 2)
+	go func() { errCh <- httpSrv.ListenAndServe() }()
+	log.Printf("listening http on %s", httpSrv.Addr)
+	go func() { errCh <- grpcSrv.Serve(tcpLis) }()
+	log.Printf("listening grpc on %s", tcpLis.Addr())
 
 	select {
 	case err := <-errCh:
@@ -47,5 +56,15 @@ func run() error {
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	return srv.Shutdown(shutdownCtx)
+
+	grpcDone := make(chan struct{})
+	go func() { grpcSrv.GracefulStop(); close(grpcDone) }()
+
+	select {
+	case <-grpcDone:
+	case <-shutdownCtx.Done():
+		grpcSrv.Stop()
+	}
+
+	return httpSrv.Shutdown(shutdownCtx)
 }

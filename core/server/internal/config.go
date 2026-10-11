@@ -32,7 +32,7 @@ type RedisBackendSettings struct {
 	DefaultTtl int64  `yaml:"default_ttl"`
 }
 type AlgoSettings struct {
-	Capacity    *int64   `yaml:"capacity"`
+	Capacity    *float64 `yaml:"capacity"`
 	Rate        *float64 `yaml:"rate"`
 	WindowSize  *int64   `yaml:"window_size"`
 	MaxRequests *int64   `yaml:"max_requests"`

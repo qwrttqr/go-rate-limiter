@@ -1,7 +1,6 @@
 package facade
 
 import (
-	"errors"
 	"net/http"
 	"qwrttqr-rate-limiter/core/server/algos"
 	"strconv"
@@ -14,7 +13,16 @@ func HealthHandler(w http.ResponseWriter, _ *http.Request) {
 
 func LimitHandler(l algos.Limiter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		req, err := readRequest(r)
+		key := r.Header.Get("X-Client-Key")
+		tokens := 1.0
+		if s := r.Header.Get("X-Required-Tokens"); s != "" {
+			n, err := strconv.ParseFloat(s, 64)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+			}
+			tokens = n
+		}
+		req, err := newRequest(key, tokens)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -22,8 +30,6 @@ func LimitHandler(l algos.Limiter) http.HandlerFunc {
 
 		d, err := l.Allow(r.Context(), req)
 		switch {
-		case errors.Is(err, algos.ErrInvalidRequest):
-			http.Error(w, err.Error(), http.StatusBadRequest) // caller's mistake
 		case err != nil:
 			http.Error(w, "rate limiter error", http.StatusInternalServerError) // store failure
 		case !d.Allowed:

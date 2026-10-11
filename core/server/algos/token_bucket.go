@@ -13,10 +13,10 @@ import (
 )
 
 type TokenBucketStore interface {
-	TakeToken(ctx context.Context, key string, rate float64, tokensRequired, now, capacity int64) (bool, int64, error)
+	TakeToken(ctx context.Context, key string, now int64, rate, tokensRequired, capacity float64) (bool, int64, error)
 }
 type TokenBucketLimiter struct {
-	Capacity int64
+	Capacity float64
 	Rate     float64
 	Store    TokenBucketStore
 	Now      func() int64
@@ -49,15 +49,12 @@ func NewTokenBucketStore(cfg internal.Configuration, cacheInstance cache.Cache, 
 }
 
 func (tbl *TokenBucketLimiter) Allow(ctx context.Context, req Request) (Decision, error) {
-	if err := req.validate(); err != nil {
-		return Decision{}, err
-	}
 	allowed, retryAfter, err := tbl.Store.TakeToken(
 		ctx,
 		req.Key,
+		tbl.Now(),
 		tbl.Rate,
 		req.RequiredTokens,
-		tbl.Now(),
 		tbl.Capacity,
 	)
 	if err != nil {
@@ -72,17 +69,17 @@ type InMemoryBucketStore struct {
 
 type BucketState struct {
 	mu         sync.Mutex
-	Tokens     int64
+	Tokens     float64
 	LastRefill int64
 }
 
 func (s *InMemoryBucketStore) TakeToken(
 	_ context.Context,
 	key string,
-	rate float64,
-	tokensRequired,
-	now,
-	capacity int64) (bool, int64, error) {
+	now int64,
+	rate,
+	requiredTokens,
+	capacity float64) (bool, int64, error) {
 	val, err := s.Cache.Get(key)
 	if err != nil {
 		val = s.Cache.LoadOrStore(key, func() any {
@@ -104,16 +101,17 @@ func (s *InMemoryBucketStore) TakeToken(
 
 	timePassed := currentTime - lastRefill
 	refillTokens := float64(timePassed) * rate
-	newTokens := min(capacity, tokens+int64(refillTokens))
+	newTokens := min(capacity, tokens+refillTokens)
 
-	if newTokens >= tokensRequired {
-		bucket.Tokens = newTokens - tokensRequired
-		if int64(refillTokens) > 0 {
-			bucket.LastRefill = now
-		}
+	bucket.LastRefill = now
+
+	if newTokens >= requiredTokens {
+		bucket.Tokens = newTokens
+		bucket.Tokens -= requiredTokens
 		return true, 0, nil
 	}
-	retryAfter := math.Ceil((float64(tokensRequired) - float64(newTokens)) / rate)
+	bucket.Tokens = newTokens
+	retryAfter := math.Ceil((requiredTokens - bucket.Tokens) / rate)
 	return false, int64(retryAfter), nil
 }
 
@@ -155,7 +153,14 @@ else
 end
 `)
 
-func (s *RedisBucketStore) TakeToken(ctx context.Context, key string, rate float64, tokensRequired, now, capacity int64) (bool, int64, error) {
+func (s *RedisBucketStore) TakeToken(
+	ctx context.Context,
+	key string,
+	now int64,
+	rate,
+	tokensRequired,
+	capacity float64,
+) (bool, int64, error) {
 	res, err := tokenBucketScript.Run(ctx, s.Client, []string{key}, capacity, rate, tokensRequired, now, s.DefaultTtl).Int64Slice()
 	if err != nil {
 		return false, 0, err
