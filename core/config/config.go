@@ -1,4 +1,4 @@
-package internal
+package config
 
 import (
 	"fmt"
@@ -7,11 +7,15 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-type Configuration struct {
+type BaseConfiguration struct {
 	UsedAlgo     string       `yaml:"use_algo"`
-	Store        string       `yaml:"store"`
 	AlgoSettings AlgoSettings `yaml:"algo_settings"`
-	Backends     Backends     `yaml:"backends"`
+}
+
+type StandaloneServiceConfiguration struct {
+	BaseConfiguration `yaml:",inline"`
+	Store             string   `yaml:"store"`
+	Backends          Backends `yaml:"backends"`
 }
 
 type Backends struct {
@@ -36,23 +40,22 @@ type AlgoSettings struct {
 	Rate        *float64 `yaml:"rate"`
 	WindowSize  *int64   `yaml:"window_size"`
 	MaxRequests *int64   `yaml:"max_requests"`
-	MinInterval *string  `yaml:"min_interval"`
 }
 
-func ReadConfig() (Configuration, error) {
+func ReadConfig() (StandaloneServiceConfiguration, error) {
 	data, err := os.ReadFile("config.yaml")
 	if err != nil {
-		return Configuration{}, fmt.Errorf("error reading configuration: %s", err.Error())
+		return StandaloneServiceConfiguration{}, fmt.Errorf("error reading configuration: %s", err.Error())
 	}
-	var config Configuration
+	var config StandaloneServiceConfiguration
 	if err := yaml.Unmarshal(data, &config); err != nil {
-		return Configuration{}, fmt.Errorf("parsing config yaml: %w", err)
+		return StandaloneServiceConfiguration{}, fmt.Errorf("parsing config yaml: %w", err)
 	}
 	applyEnvOverrides(&config)
 	return config, nil
 }
 
-func applyEnvOverrides(config *Configuration) {
+func applyEnvOverrides(config *StandaloneServiceConfiguration) {
 	if v := os.Getenv("STORE_BACKEND"); v != "" {
 		config.Store = v
 	}

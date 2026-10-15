@@ -1,6 +1,6 @@
 package cache
 
-type Cache interface {
+type InMemoryStoreInterface interface {
 	Store(key string, value any)
 	Get(key string) (any, error)
 	LoadOrStore(key string, create func() any) any

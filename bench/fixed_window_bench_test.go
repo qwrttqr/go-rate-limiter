@@ -64,7 +64,7 @@ func BenchmarkFixedWindow(b *testing.B) {
 			b.Run(w.name+"/"+p.name, func(b *testing.B) {
 				c := cache.NewCache(60, time.Minute, 256)
 				b.Cleanup(func() { _ = c.Close() })
-				store := &algos.InMemoryFixedWindowStore{Cache: c}
+				store := &algos.InMemoryFixedWindowStore{Store: c}
 				benchFixedWindow(b, store, w.nKeys, w.zipf, p.maxRequests, p.wantAllowed)
 			})
 		}

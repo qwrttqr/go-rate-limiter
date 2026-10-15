@@ -28,7 +28,7 @@ func TestRollingWindow_logic(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cache := newMockCache()
-			store := &InMemoryRollingWindowStore{Cache: cache}
+			store := &InMemoryRollingWindowStore{Store: cache}
 			rw := &RollingWindowLimiter{
 				WindowSize:  tt.windowSize,
 				MaxRequests: tt.maxRequests,
@@ -55,7 +55,7 @@ func TestRollingWindow_logic(t *testing.T) {
 func TestRollingWindow_window_moved(t *testing.T) {
 	var fakeNow int64 = 1000
 	cache := newMockCache()
-	store := &InMemoryRollingWindowStore{Cache: cache}
+	store := &InMemoryRollingWindowStore{Store: cache}
 	rw := &RollingWindowLimiter{
 		WindowSize:  10,
 		MaxRequests: 5,
@@ -98,7 +98,7 @@ func TestRollingWindow_window_moved(t *testing.T) {
 func TestRollingWindow_partial_slide(t *testing.T) {
 	var fakeNow int64 = 1000
 	cache := newMockCache()
-	store := &InMemoryRollingWindowStore{Cache: cache}
+	store := &InMemoryRollingWindowStore{Store: cache}
 	rw := &RollingWindowLimiter{
 		WindowSize:  10,
 		MaxRequests: 5,

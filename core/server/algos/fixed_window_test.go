@@ -28,7 +28,7 @@ func TestFixedWindow_logic(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cache := newMockCache()
-			store := &InMemoryFixedWindowStore{Cache: cache}
+			store := &InMemoryFixedWindowStore{Store: cache}
 			fw := &FixedWindowLimiter{
 				WindowSize:  tt.windowSize,
 				MaxRequests: tt.maxRequests,
@@ -53,7 +53,7 @@ func TestFixedWindow_logic(t *testing.T) {
 func TestFixedWindow_new_window(t *testing.T) {
 	var fakeNow int64 = 1000
 	cache := newMockCache()
-	store := &InMemoryFixedWindowStore{Cache: cache}
+	store := &InMemoryFixedWindowStore{Store: cache}
 	fw := &FixedWindowLimiter{
 		WindowSize:  10,
 		MaxRequests: 5,
@@ -97,7 +97,7 @@ func TestFixedWindow_new_window(t *testing.T) {
 func TestFixedWindow_same_window(t *testing.T) {
 	var fakeNow int64 = 1000
 	cache := newMockCache()
-	store := &InMemoryFixedWindowStore{Cache: cache}
+	store := &InMemoryFixedWindowStore{Store: cache}
 	fw := &FixedWindowLimiter{
 		WindowSize:  10,
 		MaxRequests: 5,

@@ -3,8 +3,8 @@ package algos
 import (
 	"context"
 	"fmt"
+	"qwrttqr-rate-limiter/core/config"
 	"qwrttqr-rate-limiter/core/server/cache"
-	"qwrttqr-rate-limiter/core/server/internal"
 	"sync"
 
 	"github.com/redis/go-redis/v9"
@@ -20,27 +20,27 @@ type FixedWindowLimiter struct {
 	Now         func() int64
 }
 
-func ValidateFixedWindowConfig(cfg internal.Configuration) error {
-	if err := CheckRequiredFields(cfg.AlgoSettings, []string{"window_size", "max_requests"}); err != nil {
+func ValidateFixedWindowConfig(cfg config.AlgoSettings) error {
+	if err := CheckRequiredFields(cfg, []string{"window_size", "max_requests"}); err != nil {
 		return err
 	}
-	if *cfg.AlgoSettings.MaxRequests <= 0 {
+	if *cfg.MaxRequests <= 0 {
 		return fmt.Errorf("max_requests must be greater than 0")
 	}
-	if *cfg.AlgoSettings.WindowSize <= 0 {
+	if *cfg.WindowSize <= 0 {
 		return fmt.Errorf("window_size must be greater than 0")
 	}
 	return nil
 }
 
-func NewFixedWindowStore(cfg internal.Configuration, cacheInstance cache.Cache, redisClient *redis.Client) (FixedWindowStore, error) {
-	switch cfg.Store {
+func NewFixedWindowStore(store string, cacheInstance cache.InMemoryStoreInterface, redisClient *redis.Client, redisDefaultKeyTTL int64) (FixedWindowStore, error) {
+	switch store {
 	case "in_memory":
-		return &InMemoryFixedWindowStore{Cache: cacheInstance}, nil
+		return &InMemoryFixedWindowStore{Store: cacheInstance}, nil
 	case "redis":
-		return &RedisFixedWindowStore{Client: redisClient}, nil
+		return &RedisFixedWindowStore{Store: cache.NewRedisStore(redisClient, redisDefaultKeyTTL)}, nil
 	default:
-		return nil, fmt.Errorf("unsupported store: %s", cfg.Store)
+		return nil, fmt.Errorf("unsupported store: %s", store)
 	}
 }
 
@@ -54,7 +54,11 @@ func (fwl *FixedWindowLimiter) Allow(ctx context.Context, req Request) (Decision
 }
 
 type InMemoryFixedWindowStore struct {
-	Cache cache.Cache
+	Store cache.InMemoryStoreInterface
+}
+
+type RedisFixedWindowStore struct {
+	Store cache.RedisStoreInterface
 }
 type FixedWindowState struct {
 	mu           sync.Mutex
@@ -70,9 +74,9 @@ func (store *InMemoryFixedWindowStore) CheckAndIncrement(
 ) (bool, int64, error) {
 	windowStart := (now / windowSize) * windowSize
 
-	val, err := store.Cache.Get(key)
+	val, err := store.Store.Get(key)
 	if err != nil {
-		val = store.Cache.LoadOrStore(key, func() any { return &FixedWindowState{StoredWindow: windowStart} })
+		val = store.Store.LoadOrStore(key, func() any { return &FixedWindowState{StoredWindow: windowStart} })
 	}
 	window := val.(*FixedWindowState)
 
@@ -91,10 +95,6 @@ func (store *InMemoryFixedWindowStore) CheckAndIncrement(
 	timeToNextWindow := max((window.StoredWindow+windowSize)-now, 0)
 
 	return false, timeToNextWindow, nil
-}
-
-type RedisFixedWindowStore struct {
-	Client *redis.Client
 }
 
 var fixedWindowScript = redis.NewScript(`
@@ -121,11 +121,5 @@ return {0, windowStart + windowSize - now}
 `)
 
 func (s *RedisFixedWindowStore) CheckAndIncrement(ctx context.Context, key string, windowSize, maxRequests, now int64) (bool, int64, error) {
-	res, err := fixedWindowScript.Run(ctx, s.Client, []string{key}, windowSize, maxRequests, now).Int64Slice()
-	if err != nil {
-		return false, 0, err
-	}
-	allowed := res[0] == 1
-	retryAfter := res[1]
-	return allowed, retryAfter, nil
+	return s.Store.RunLuaScript(ctx, fixedWindowScript, []string{key}, windowSize, maxRequests, now)
 }

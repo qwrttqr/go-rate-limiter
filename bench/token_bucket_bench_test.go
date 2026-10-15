@@ -17,8 +17,8 @@ func benchTokenBucket(
 	nKeys int,
 	zipf bool,
 	rate float64,
-	capacity int64,
-	tokensRequired int64,
+	capacity float64,
+	tokensRequired float64,
 	wantAllowed bool,
 ) {
 	keys := make([]string, nKeys)
@@ -32,15 +32,16 @@ func benchTokenBucket(
 
 	if !wantAllowed {
 		for _, k := range keys {
-			drain := capacity / tokensRequired
+			// drain is how many times we can do this before limit is ended
+			drain := int(capacity / tokensRequired)
 			for range drain {
-				store.TakeToken(ctx, k, rate, tokensRequired, now, capacity)
+				store.TakeToken(ctx, k, now, rate, tokensRequired, capacity)
 			}
 		}
 	}
 
 	for _, k := range keys {
-		allowed, _, err := store.TakeToken(ctx, k, rate, tokensRequired, now, capacity)
+		allowed, _, err := store.TakeToken(ctx, k, now, rate, tokensRequired, capacity)
 		if err != nil || allowed != wantAllowed {
 			b.Fatalf("wrong path: allowed=%v err=%v", allowed, err)
 		}
@@ -52,7 +53,7 @@ func benchTokenBucket(
 		pos := rand.IntN(seqLen)
 		for pb.Next() {
 			k := keys[seq[pos&(seqLen-1)]]
-			store.TakeToken(ctx, k, rate, tokensRequired, now, capacity)
+			store.TakeToken(ctx, k, now, rate, tokensRequired, capacity)
 			pos++
 		}
 	})
@@ -71,8 +72,8 @@ func BenchmarkTokenBucket(b *testing.B) {
 	paths := []struct {
 		name           string
 		rate           float64
-		capacity       int64
-		tokensRequired int64
+		capacity       float64
+		tokensRequired float64
 		wantAllowed    bool
 	}{
 		{"allow", 0, 2 << 30, 1, true},
@@ -84,7 +85,7 @@ func BenchmarkTokenBucket(b *testing.B) {
 			b.Run(w.name+"/"+p.name, func(b *testing.B) {
 				c := cache.NewCache(60, time.Minute, 256)
 				b.Cleanup(func() { _ = c.Close() })
-				store := &algos.InMemoryBucketStore{Cache: c}
+				store := &algos.InMemoryTokenBucketStore{Store: c}
 				benchTokenBucket(b, store, w.nKeys, w.zipf, p.rate, p.capacity, p.tokensRequired, p.wantAllowed)
 			})
 		}

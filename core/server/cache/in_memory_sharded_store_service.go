@@ -16,7 +16,7 @@ type cacheEntry struct {
 	time  int64
 }
 
-type ShardedInMemoryCache struct {
+type ShardedInMemoryStore struct {
 	shards         []*shard
 	shardsCount    uint32
 	expirationTime int64
@@ -25,7 +25,7 @@ type ShardedInMemoryCache struct {
 	once           sync.Once
 }
 
-func (cache *ShardedInMemoryCache) getShard(key string) *shard {
+func (cache *ShardedInMemoryStore) getShard(key string) *shard {
 	h := uint32(2166136261)
 	for i := 0; i < len(key); i++ {
 		h ^= uint32(key[i])
@@ -34,14 +34,14 @@ func (cache *ShardedInMemoryCache) getShard(key string) *shard {
 	return cache.shards[h&(cache.shardsCount-1)]
 }
 
-func (cache *ShardedInMemoryCache) Store(key string, value any) {
+func (cache *ShardedInMemoryStore) Store(key string, value any) {
 	shard := cache.getShard(key)
 	shard.mu.Lock()
 	defer shard.mu.Unlock()
 	shard.entries[key] = &cacheEntry{entry: value, time: time.Now().Unix()}
 }
 
-func (cache *ShardedInMemoryCache) Get(key string) (any, error) {
+func (cache *ShardedInMemoryStore) Get(key string) (any, error) {
 	shard := cache.getShard(key)
 	shard.mu.Lock()
 	defer shard.mu.Unlock()
@@ -53,7 +53,7 @@ func (cache *ShardedInMemoryCache) Get(key string) (any, error) {
 	return result.entry, nil
 }
 
-func (cache *ShardedInMemoryCache) LoadOrStore(key string, create func() any) any {
+func (cache *ShardedInMemoryStore) LoadOrStore(key string, create func() any) any {
 	shard := cache.getShard(key)
 	shard.mu.Lock()
 	defer shard.mu.Unlock()
@@ -67,14 +67,14 @@ func (cache *ShardedInMemoryCache) LoadOrStore(key string, create func() any) an
 	return result.entry
 }
 
-func (cache *ShardedInMemoryCache) Delete(key string) {
+func (cache *ShardedInMemoryStore) Delete(key string) {
 	shard := cache.getShard(key)
 	shard.mu.Lock()
 	defer shard.mu.Unlock()
 	delete(shard.entries, key)
 }
 
-func (cache *ShardedInMemoryCache) handleEviction() {
+func (cache *ShardedInMemoryStore) handleEviction() {
 	currentTime := time.Now().Unix()
 	for _, shard := range cache.shards {
 		shard.mu.Lock()
@@ -87,7 +87,7 @@ func (cache *ShardedInMemoryCache) handleEviction() {
 	}
 }
 
-func (cache *ShardedInMemoryCache) Close() error {
+func (cache *ShardedInMemoryStore) Close() error {
 	cache.once.Do(func() { close(cache.done) })
 	return nil
 }
@@ -96,9 +96,9 @@ func NewCache(
 	expirationTime int64,
 	evictionInterval time.Duration,
 	shardCount uint32,
-) *ShardedInMemoryCache {
+) *ShardedInMemoryStore {
 	ticker := time.NewTicker(evictionInterval)
-	cache := &ShardedInMemoryCache{
+	cache := &ShardedInMemoryStore{
 		shards:         make([]*shard, shardCount),
 		shardsCount:    shardCount,
 		expirationTime: expirationTime,

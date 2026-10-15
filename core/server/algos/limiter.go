@@ -10,7 +10,8 @@ type Request struct {
 }
 
 type Decision struct {
-	Allowed    bool
+	Allowed bool
+	// RetryAfter is seconds
 	RetryAfter int64
 }
 

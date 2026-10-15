@@ -3,8 +3,8 @@ package algos
 import (
 	"context"
 	"fmt"
+	"qwrttqr-rate-limiter/core/config"
 	"qwrttqr-rate-limiter/core/server/cache"
-	"qwrttqr-rate-limiter/core/server/internal"
 	"sync"
 	"time"
 
@@ -29,21 +29,21 @@ func (rwl *RollingWindowLimiter) Configure() {
 	}
 }
 
-func ValidateRollingWindowConfiguration(cfg internal.Configuration) error {
-	if *cfg.AlgoSettings.MaxRequests <= 0 {
+func ValidateRollingWindowConfig(cfg config.AlgoSettings) error {
+	if *cfg.MaxRequests <= 0 {
 		return fmt.Errorf("the max requests param should be strictly greater then 0")
 	}
-	return CheckRequiredFields(cfg.AlgoSettings, []string{"window_size", "max_requests"})
+	return CheckRequiredFields(cfg, []string{"window_size", "max_requests"})
 }
 
-func NewRollingWindowStore(cfg internal.Configuration, cacheInstance cache.Cache, redisClient *redis.Client) (RollingWindowStore, error) {
-	switch cfg.Store {
+func NewRollingWindowStore(store string, cacheInstance cache.InMemoryStoreInterface, redisClient *redis.Client, redisDefaultKeyTTL int64) (RollingWindowStore, error) {
+	switch store {
 	case "in_memory":
-		return &InMemoryRollingWindowStore{Cache: cacheInstance}, nil
+		return &InMemoryRollingWindowStore{Store: cacheInstance}, nil
 	case "redis":
-		return &RedisRollingWindowStore{Client: redisClient}, nil
+		return &RedisRollingWindowStore{Store: cache.NewRedisStore(redisClient, redisDefaultKeyTTL)}, nil
 	default:
-		return nil, fmt.Errorf("unsupported store: %s", cfg.Store)
+		return nil, fmt.Errorf("unsupported store: %s", store)
 	}
 }
 
@@ -62,7 +62,11 @@ type RollingWindowState struct {
 }
 
 type InMemoryRollingWindowStore struct {
-	Cache cache.Cache
+	Store cache.InMemoryStoreInterface
+}
+
+type RedisRollingWindowStore struct {
+	Store cache.RedisStoreInterface
 }
 
 func (s *InMemoryRollingWindowStore) CheckAndIncrement(
@@ -72,9 +76,9 @@ func (s *InMemoryRollingWindowStore) CheckAndIncrement(
 	maxRequests,
 	now int64) (bool, int64, error) {
 
-	val, err := s.Cache.Get(key)
+	val, err := s.Store.Get(key)
 	if err != nil {
-		val = s.Cache.LoadOrStore(key, func() any { return &RollingWindowState{Timestamps: make([]int64, 0, 8)} })
+		val = s.Store.LoadOrStore(key, func() any { return &RollingWindowState{Timestamps: make([]int64, 0, 8)} })
 	}
 	windowStart := now - windowSize
 	window := val.(*RollingWindowState)
@@ -101,10 +105,6 @@ func (s *InMemoryRollingWindowStore) CheckAndIncrement(
 	return false, retryAfter, nil
 }
 
-type RedisRollingWindowStore struct {
-	Client *redis.Client
-}
-
 var rollingWindowScript = redis.NewScript(`
 local windowSize = tonumber(ARGV[1])
 local now = tonumber(ARGV[2])
@@ -127,11 +127,5 @@ end
 `)
 
 func (s *RedisRollingWindowStore) CheckAndIncrement(ctx context.Context, key string, windowSize, maxRequests, now int64) (bool, int64, error) {
-	res, err := rollingWindowScript.Run(ctx, s.Client, []string{key}, windowSize, maxRequests, now).Int64Slice()
-	if err != nil {
-		return false, 0, err
-	}
-	allowed := res[0] == 1
-	retryAfter := res[1]
-	return allowed, retryAfter, nil
+	return s.Store.RunLuaScript(ctx, rollingWindowScript, []string{key}, windowSize, maxRequests, now)
 }

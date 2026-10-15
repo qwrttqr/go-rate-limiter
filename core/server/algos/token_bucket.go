@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"qwrttqr-rate-limiter/core/config"
 	"qwrttqr-rate-limiter/core/server/cache"
-	"qwrttqr-rate-limiter/core/server/internal"
 	"sync"
 	"time"
 
@@ -30,21 +30,21 @@ func (tbl *TokenBucketLimiter) Configure() {
 	}
 }
 
-func ValidateTokenBucketConfig(cfg internal.Configuration) error {
-	if *cfg.AlgoSettings.Rate <= 0 {
+func ValidateTokenBucketConfig(cfg config.AlgoSettings) error {
+	if *cfg.Rate <= 0 {
 		return fmt.Errorf("the rate param should be strictly greater then 0")
 	}
-	return CheckRequiredFields(cfg.AlgoSettings, []string{"capacity", "rate"})
+	return CheckRequiredFields(cfg, []string{"capacity", "rate"})
 }
 
-func NewTokenBucketStore(cfg internal.Configuration, cacheInstance cache.Cache, redisClient *redis.Client) (TokenBucketStore, error) {
-	switch cfg.Store {
+func NewTokenBucketStore(store string, cacheInstance cache.InMemoryStoreInterface, redisClient *redis.Client, redisDefaultKeyTTL int64) (TokenBucketStore, error) {
+	switch store {
 	case "in_memory":
-		return &InMemoryBucketStore{Cache: cacheInstance}, nil
+		return &InMemoryTokenBucketStore{Store: cacheInstance}, nil
 	case "redis":
-		return &RedisBucketStore{Client: redisClient, DefaultTtl: cfg.Backends.Redis.DefaultTtl}, nil
+		return &RedisTokenBucketStore{Store: cache.NewRedisStore(redisClient, redisDefaultKeyTTL)}, nil
 	default:
-		return nil, fmt.Errorf("unsupported store: %s", cfg.Store)
+		return nil, fmt.Errorf("unsupported store: %s", store)
 	}
 }
 
@@ -63,8 +63,11 @@ func (tbl *TokenBucketLimiter) Allow(ctx context.Context, req Request) (Decision
 	return Decision{Allowed: allowed, RetryAfter: retryAfter}, nil
 }
 
-type InMemoryBucketStore struct {
-	Cache cache.Cache
+type InMemoryTokenBucketStore struct {
+	Store cache.InMemoryStoreInterface
+}
+type RedisTokenBucketStore struct {
+	Store cache.RedisStoreInterface
 }
 
 type BucketState struct {
@@ -73,16 +76,16 @@ type BucketState struct {
 	LastRefill int64
 }
 
-func (s *InMemoryBucketStore) TakeToken(
+func (s *InMemoryTokenBucketStore) TakeToken(
 	_ context.Context,
 	key string,
 	now int64,
 	rate,
 	requiredTokens,
 	capacity float64) (bool, int64, error) {
-	val, err := s.Cache.Get(key)
+	val, err := s.Store.Get(key)
 	if err != nil {
-		val = s.Cache.LoadOrStore(key, func() any {
+		val = s.Store.LoadOrStore(key, func() any {
 			return &BucketState{
 				Tokens:     capacity,
 				LastRefill: now,
@@ -113,11 +116,6 @@ func (s *InMemoryBucketStore) TakeToken(
 	bucket.Tokens = newTokens
 	retryAfter := math.Ceil((requiredTokens - bucket.Tokens) / rate)
 	return false, int64(retryAfter), nil
-}
-
-type RedisBucketStore struct {
-	Client     *redis.Client
-	DefaultTtl int64
 }
 
 var tokenBucketScript = redis.NewScript(`
@@ -153,7 +151,7 @@ else
 end
 `)
 
-func (s *RedisBucketStore) TakeToken(
+func (s *RedisTokenBucketStore) TakeToken(
 	ctx context.Context,
 	key string,
 	now int64,
@@ -161,11 +159,5 @@ func (s *RedisBucketStore) TakeToken(
 	tokensRequired,
 	capacity float64,
 ) (bool, int64, error) {
-	res, err := tokenBucketScript.Run(ctx, s.Client, []string{key}, capacity, rate, tokensRequired, now, s.DefaultTtl).Int64Slice()
-	if err != nil {
-		return false, 0, err
-	}
-	allowed := res[0] == 1
-	retryAfter := res[1]
-	return allowed, retryAfter, nil
+	return s.Store.RunLuaScript(ctx, tokenBucketScript, []string{key}, rate, tokensRequired, capacity, now)
 }

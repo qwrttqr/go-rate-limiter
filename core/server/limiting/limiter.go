@@ -3,9 +3,9 @@ package limiting
 import (
 	"fmt"
 	"io"
+	"qwrttqr-rate-limiter/core/config"
 	"qwrttqr-rate-limiter/core/server/algos"
 	"qwrttqr-rate-limiter/core/server/cache"
-	"qwrttqr-rate-limiter/core/server/internal"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -19,14 +19,14 @@ type RateLimiter struct {
 }
 
 func NewRateLimiter() (_ *RateLimiter, err error) {
-	var cfg internal.Configuration
-	cfg, err = internal.ReadConfig()
+	var cfg config.StandaloneServiceConfiguration
+	cfg, err = config.ReadConfig()
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config: %w", err)
 	}
 
 	var (
-		mem    cache.Cache
+		mem    cache.InMemoryStoreInterface
 		rdb    *redis.Client
 		closer io.Closer
 	)
@@ -58,10 +58,10 @@ func NewRateLimiter() (_ *RateLimiter, err error) {
 
 	switch cfg.UsedAlgo {
 	case "token_bucket":
-		if err := algos.ValidateTokenBucketConfig(cfg); err != nil {
+		if err := algos.ValidateTokenBucketConfig(cfg.AlgoSettings); err != nil {
 			return nil, err
 		}
-		store, err := algos.NewTokenBucketStore(cfg, mem, rdb)
+		store, err := algos.NewTokenBucketStore(cfg.UsedAlgo, mem, rdb, cfg.Backends.Redis.DefaultTtl)
 		if err != nil {
 			return nil, err
 		}
@@ -72,10 +72,10 @@ func NewRateLimiter() (_ *RateLimiter, err error) {
 			Now:      realClock,
 		}
 	case "fixed_window":
-		if err := algos.ValidateFixedWindowConfig(cfg); err != nil {
+		if err := algos.ValidateFixedWindowConfig(cfg.AlgoSettings); err != nil {
 			return nil, err
 		}
-		store, err := algos.NewFixedWindowStore(cfg, mem, rdb)
+		store, err := algos.NewFixedWindowStore(cfg.UsedAlgo, mem, rdb, cfg.Backends.Redis.DefaultTtl)
 		if err != nil {
 			return nil, err
 		}
@@ -86,10 +86,10 @@ func NewRateLimiter() (_ *RateLimiter, err error) {
 			Now:         realClock,
 		}
 	case "rolling_window":
-		if err := algos.ValidateRollingWindowConfiguration(cfg); err != nil {
+		if err := algos.ValidateRollingWindowConfig(cfg.AlgoSettings); err != nil {
 			return nil, err
 		}
-		store, err := algos.NewRollingWindowStore(cfg, mem, rdb)
+		store, err := algos.NewRollingWindowStore(cfg.UsedAlgo, mem, rdb, cfg.Backends.Redis.DefaultTtl)
 		if err != nil {
 			return nil, err
 		}
