@@ -55,7 +55,7 @@ func newFixedWindow(cfg config.AlgoSettings, store algos.FixedWindowStore) (algo
 	}, nil
 }
 
-func newRollingWindow(cfg config.AlgoSettings, store algos.FixedWindowStore) (algos.Limiter, error) {
+func newRollingWindow(cfg config.AlgoSettings, store algos.RollingWindowStore) (algos.Limiter, error) {
 	if err := algos.ValidateRollingWindowConfig(cfg); err != nil {
 		return nil, err
 	}
