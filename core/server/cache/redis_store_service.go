@@ -32,3 +32,7 @@ func (r *RedisStore) RunLuaScript(
 	}
 	return res[0] == 1, res[1], nil
 }
+
+func (r *RedisStore) DefaultTtl() int64 {
+	return r.defaultTtl
+}
