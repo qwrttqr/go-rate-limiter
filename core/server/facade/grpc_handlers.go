@@ -25,7 +25,7 @@ func (s *GRPCServer) Allow(ctx context.Context, in *ratelimiterv1.AllowRequest) 
 	if tokens == 0.0 {
 		tokens = 1.0
 	}
-	req, err := newRequest(in.GetKey(), tokens)
+	req, err := NewRequest(in.GetKey(), tokens)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}

@@ -5,7 +5,7 @@ import (
 	"qwrttqr-rate-limiter/core/server/algos"
 )
 
-func newRequest(key string, tokens float64) (algos.Request, error) {
+func NewRequest(key string, tokens float64) (algos.Request, error) {
 	if key == "" {
 		return algos.Request{}, errors.New("missing mandatory X-Client-Key header")
 	}

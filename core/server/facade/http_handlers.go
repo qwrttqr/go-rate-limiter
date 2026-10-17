@@ -22,7 +22,7 @@ func LimitHandler(l algos.Limiter) http.HandlerFunc {
 			}
 			tokens = n
 		}
-		req, err := newRequest(key, tokens)
+		req, err := NewRequest(key, tokens)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
