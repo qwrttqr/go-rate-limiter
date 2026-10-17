@@ -10,12 +10,15 @@ import (
 
 func NewHTTPMiddleware(
 	algo algos.Limiter,
-	keyDer KeyDerivationFunction,
-	costDer CostDerivationFunction,
+	keyDer HTTPKeyDerivationFunction,
+	costDer HTTPCostDerivationFunction,
 	failOpen bool,
 ) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if algo == nil || keyDer == nil {
+				panic("middleware: limiter and key function are required")
+			}
 			fail := func(stage string, err error) {
 				log.Printf("limiter error on %s: %v", stage, err)
 				if failOpen {
