@@ -159,5 +159,5 @@ func (s *RedisTokenBucketStore) TakeToken(
 	tokensRequired,
 	capacity float64,
 ) (bool, int64, error) {
-	return s.Store.RunLuaScript(ctx, tokenBucketScript, []string{key}, rate, tokensRequired, capacity, now)
+	return s.Store.RunLuaScript(ctx, tokenBucketScript, []string{key}, rate, tokensRequired, capacity, now, s.Store.DefaultTtl())
 }

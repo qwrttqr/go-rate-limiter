@@ -7,6 +7,7 @@ import (
 	"qwrttqr-rate-limiter/core/server/cache"
 	"sync"
 	"time"
+	"uuid"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -49,7 +50,12 @@ func NewRollingWindowStore(store string, cacheInstance cache.InMemoryStoreInterf
 
 func (rwl *RollingWindowLimiter) Allow(ctx context.Context, req Request) (Decision, error) {
 	allowed, retryAfter, err := rwl.Store.CheckAndIncrement(
-		ctx, req.Key, rwl.WindowSize, rwl.MaxRequests, rwl.Now())
+		ctx,
+		req.Key,
+		rwl.WindowSize,
+		rwl.MaxRequests,
+		rwl.Now(),
+	)
 	if err != nil {
 		return Decision{}, err
 	}
@@ -106,9 +112,10 @@ func (s *InMemoryRollingWindowStore) CheckAndIncrement(
 }
 
 var rollingWindowScript = redis.NewScript(`
-local windowSize = tonumber(ARGV[1])
-local now = tonumber(ARGV[2])
+local requestId = ARGV[1]
+local windowSize = tonumber(ARGV[2])
 local maxRequests = tonumber(ARGV[3])
+local now = tonumber(ARGV[4])
 
 local windowStart = now - windowSize
 
@@ -116,16 +123,20 @@ redis.call("ZREMRANGEBYSCORE", KEYS[1], "-inf", windowStart)
 local count = redis.call("ZCARD", KEYS[1])
 
 if count < maxRequests then
-    redis.call("ZADD", KEYS[1], now, now)
+    redis.call("ZADD", KEYS[1], now, requestId)
     redis.call("EXPIRE", KEYS[1], windowSize)
     return {1, 0}
 else
 	local oldest = redis.call("ZRANGE", KEYS[1], 0, 0, "WITHSCORES")
-	local retryAfter = tonumber(oldest[2]) - windowStart
+	local retryAfter = 0
+	if oldest and oldest[2] then
+		retryAfter = tonumber(oldest[2]) - windowStart
+	end
     return {0, retryAfter}
 end
 `)
 
 func (s *RedisRollingWindowStore) CheckAndIncrement(ctx context.Context, key string, windowSize, maxRequests, now int64) (bool, int64, error) {
-	return s.Store.RunLuaScript(ctx, rollingWindowScript, []string{key}, windowSize, maxRequests, now)
+	requestId := uuid.New().String()
+	return s.Store.RunLuaScript(ctx, rollingWindowScript, []string{key}, requestId, windowSize, maxRequests, now)
 }

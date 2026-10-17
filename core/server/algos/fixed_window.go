@@ -67,7 +67,8 @@ type FixedWindowState struct {
 }
 
 func (store *InMemoryFixedWindowStore) CheckAndIncrement(
-	_ context.Context, key string,
+	_ context.Context,
+	key string,
 	windowSize,
 	maxRequests,
 	now int64,
@@ -99,8 +100,8 @@ func (store *InMemoryFixedWindowStore) CheckAndIncrement(
 
 var fixedWindowScript = redis.NewScript(`
 local stored = redis.call("HMGET", KEYS[1], "window", "count")
-local storedWindow = tonumber(stored[1])
-local count = tonumber(stored[2]) or 0
+local storedWindow = stored[1] and tonumber(stored[1]) 
+local count = stored[2] and tonumber(stored[2]) or 0
 local windowSize = tonumber(ARGV[1])
 local maxRequests = tonumber(ARGV[2])
 local now = tonumber(ARGV[3])
