@@ -65,19 +65,19 @@ func newRollingWindow(cfg config.AlgoSettings, store algos.RollingWindowStore) (
 }
 
 func (b *memoryBackend) TokenBucket(cfg config.AlgoSettings) (algos.Limiter, error) {
-	return newTokenBucket(cfg, &algos.InMemoryTokenBucketStore{Store: b.mem})
+	return newTokenBucket(cfg, &algos.InMemoryTokenBucketStore{Backend: b.mem})
 }
 
 func (b *memoryBackend) FixedWindow(cfg config.AlgoSettings) (algos.Limiter, error) {
-	return newFixedWindow(cfg, &algos.InMemoryFixedWindowStore{Store: b.mem})
+	return newFixedWindow(cfg, &algos.InMemoryFixedWindowStore{Backend: b.mem})
 }
 
 func (b *memoryBackend) RollingWindow(cfg config.AlgoSettings) (algos.Limiter, error) {
-	return newRollingWindow(cfg, &algos.InMemoryRollingWindowStore{Store: b.mem})
+	return newRollingWindow(cfg, &algos.InMemoryRollingWindowStore{Backend: b.mem})
 }
 
 func (b *redisBackend) TokenBucket(cfg config.AlgoSettings) (algos.Limiter, error) {
-	return newTokenBucket(cfg, &algos.RedisTokenBucketStore{Store: b.redis})
+	return newTokenBucket(cfg, &algos.RedisTokenBucketStore{Backend: b.redis})
 }
 
 func (b *redisBackend) FixedWindow(cfg config.AlgoSettings) (algos.Limiter, error) {
@@ -85,7 +85,7 @@ func (b *redisBackend) FixedWindow(cfg config.AlgoSettings) (algos.Limiter, erro
 }
 
 func (b *redisBackend) RollingWindow(cfg config.AlgoSettings) (algos.Limiter, error) {
-	return newRollingWindow(cfg, &algos.RedisRollingWindowStore{Store: b.redis})
+	return newRollingWindow(cfg, &algos.RedisRollingWindowStore{Backend: b.redis})
 }
 
 var limiterBuilders = map[string]func(Backend, config.AlgoSettings) (algos.Limiter, error){

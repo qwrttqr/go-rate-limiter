@@ -48,7 +48,7 @@ func TestTokenBucket_logic(t *testing.T) {
 				tokensRequired = *tt.tokensRequired
 			}
 			cache := newMockCache()
-			store := &InMemoryTokenBucketStore{Store: cache}
+			store := &InMemoryTokenBucketStore{Backend: cache}
 			tb := &TokenBucketLimiter{
 				Capacity: tt.capacity,
 				Rate:     tt.rate,
@@ -75,7 +75,7 @@ func TestTokenBucket_logic(t *testing.T) {
 func TestTokenBucket_refill(t *testing.T) {
 	var fakeNow int64 = 1000
 	cache := newMockCache()
-	store := &InMemoryTokenBucketStore{Store: cache}
+	store := &InMemoryTokenBucketStore{Backend: cache}
 	tb := &TokenBucketLimiter{
 		Capacity: 10,
 		Rate:     1,

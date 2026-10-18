@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"qwrttqr-rate-limiter/core/config"
 	"qwrttqr-rate-limiter/core/server/cache"
-	"sync"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -36,7 +35,7 @@ func ValidateFixedWindowConfig(cfg config.AlgoSettings) error {
 func NewFixedWindowStore(store string, cacheInstance cache.InMemoryStoreInterface, redisClient *redis.Client, redisDefaultKeyTTL int64) (FixedWindowStore, error) {
 	switch store {
 	case "in_memory":
-		return &InMemoryFixedWindowStore{Store: cacheInstance}, nil
+		return &InMemoryFixedWindowStore{Backend: cacheInstance}, nil
 	case "redis":
 		return &RedisFixedWindowStore{Store: cache.NewRedisStore(redisClient, redisDefaultKeyTTL)}, nil
 	default:
@@ -54,16 +53,35 @@ func (fwl *FixedWindowLimiter) Allow(ctx context.Context, req Request) (Decision
 }
 
 type InMemoryFixedWindowStore struct {
-	Store cache.InMemoryStoreInterface
+	Backend cache.InMemoryStoreInterface
 }
 
 type RedisFixedWindowStore struct {
 	Store cache.RedisStoreInterface
 }
 type FixedWindowState struct {
-	mu           sync.Mutex
 	Count        int64
 	StoredWindow int64
+}
+
+func (fws *FixedWindowState) check(
+	windowStart,
+	windowSize,
+	maxRequests,
+	now int64,
+) (bool, int64) {
+	if fws.StoredWindow < windowStart {
+		fws.Count = 0
+		fws.StoredWindow = windowStart
+	}
+	if fws.Count < maxRequests {
+		fws.Count++
+		return true, 0
+	}
+
+	timeToNextWindow := max((fws.StoredWindow+windowSize)-now, 0)
+
+	return false, timeToNextWindow
 }
 
 func (store *InMemoryFixedWindowStore) CheckAndIncrement(
@@ -72,30 +90,20 @@ func (store *InMemoryFixedWindowStore) CheckAndIncrement(
 	windowSize,
 	maxRequests,
 	now int64,
-) (bool, int64, error) {
+) (allowed bool, retryAfter int64, err error) {
 	windowStart := (now / windowSize) * windowSize
-
-	val, err := store.Store.Get(key)
-	if err != nil {
-		val = store.Store.LoadOrStore(key, func() any { return &FixedWindowState{StoredWindow: windowStart} })
-	}
-	window := val.(*FixedWindowState)
-
-	window.mu.Lock()
-	defer window.mu.Unlock()
-
-	if window.StoredWindow < windowStart {
-		window.Count = 0
-		window.StoredWindow = windowStart
-	}
-	if window.Count < maxRequests {
-		window.Count++
-		return true, 0, nil
-	}
-
-	timeToNextWindow := max((window.StoredWindow+windowSize)-now, 0)
-
-	return false, timeToNextWindow, nil
+	err = store.Backend.Update(
+		key,
+		func() any { return &FixedWindowState{StoredWindow: windowStart} },
+		func(v any) error {
+			st, ok := v.(*FixedWindowState)
+			if !ok {
+				return fmt.Errorf("unexpected state type %T for key %q", v, key)
+			}
+			allowed, retryAfter = st.check(windowStart, windowSize, maxRequests, now)
+			return nil
+		})
+	return allowed, retryAfter, err
 }
 
 var fixedWindowScript = redis.NewScript(`

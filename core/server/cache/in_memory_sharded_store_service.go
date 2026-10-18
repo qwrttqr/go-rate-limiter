@@ -12,8 +12,8 @@ type shard struct {
 }
 
 type cacheEntry struct {
-	entry any
-	time  int64
+	entry      any
+	lastAccess int64
 }
 
 type ShardedInMemoryStore struct {
@@ -38,7 +38,7 @@ func (cache *ShardedInMemoryStore) Store(key string, value any) {
 	shard := cache.getShard(key)
 	shard.mu.Lock()
 	defer shard.mu.Unlock()
-	shard.entries[key] = &cacheEntry{entry: value, time: time.Now().Unix()}
+	shard.entries[key] = &cacheEntry{entry: value, lastAccess: time.Now().Unix()}
 }
 
 func (cache *ShardedInMemoryStore) Get(key string) (any, error) {
@@ -49,21 +49,35 @@ func (cache *ShardedInMemoryStore) Get(key string) (any, error) {
 	if !present {
 		return nil, errors.New("cache entry is not present")
 	}
-	result.time = time.Now().Unix()
+	result.lastAccess = time.Now().Unix()
 	return result.entry, nil
 }
 
-func (cache *ShardedInMemoryStore) LoadOrStore(key string, create func() any) any {
+func (cache *ShardedInMemoryStore) Update(key string, createFn func() any, fn func(v any) error) error {
+	shard := cache.getShard(key)
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
+	now := time.Now().Unix()
+	value, present := shard.entries[key]
+	if !present {
+		value = &cacheEntry{entry: createFn(), lastAccess: now}
+		shard.entries[key] = value
+	}
+	value.lastAccess = time.Now().Unix()
+	return fn(value.entry)
+}
+
+func (cache *ShardedInMemoryStore) LoadOrStore(key string, createFn func() any) any {
 	shard := cache.getShard(key)
 	shard.mu.Lock()
 	defer shard.mu.Unlock()
 	result, present := shard.entries[key]
 	if !present {
-		value := create()
-		shard.entries[key] = &cacheEntry{entry: value, time: time.Now().Unix()}
+		value := createFn()
+		shard.entries[key] = &cacheEntry{entry: value, lastAccess: time.Now().Unix()}
 		return value
 	}
-	result.time = time.Now().Unix()
+	result.lastAccess = time.Now().Unix()
 	return result.entry
 }
 
@@ -79,7 +93,7 @@ func (cache *ShardedInMemoryStore) handleEviction() {
 	for _, shard := range cache.shards {
 		shard.mu.Lock()
 		for key, value := range shard.entries {
-			if currentTime-cache.expirationTime > value.time {
+			if currentTime-cache.expirationTime > value.lastAccess {
 				delete(shard.entries, key)
 			}
 		}

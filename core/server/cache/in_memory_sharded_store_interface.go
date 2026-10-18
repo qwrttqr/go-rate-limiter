@@ -1,9 +1,6 @@
 package cache
 
 type InMemoryStoreInterface interface {
-	Store(key string, value any)
-	Get(key string) (any, error)
-	LoadOrStore(key string, create func() any) any
-	Delete(key string)
+	Update(key string, newFn func() any, fn func(v any) error) error
 	Close() error
 }
