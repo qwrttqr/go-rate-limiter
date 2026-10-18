@@ -19,6 +19,7 @@ func LimitHandler(l algos.Limiter) http.HandlerFunc {
 			n, err := strconv.ParseFloat(s, 64)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
 			}
 			tokens = n
 		}

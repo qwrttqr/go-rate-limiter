@@ -124,7 +124,7 @@ func (store *InMemoryTokenBucketStore) TakeToken(
 			return nil
 		},
 	)
-	return allowed, retryAfter, nil
+	return allowed, retryAfter, err
 }
 
 var tokenBucketScript = redis.NewScript(`

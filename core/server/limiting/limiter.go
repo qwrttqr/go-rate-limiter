@@ -6,6 +6,7 @@ import (
 	"qwrttqr-rate-limiter/core/config"
 	"qwrttqr-rate-limiter/core/server/algos"
 	"qwrttqr-rate-limiter/core/server/cache"
+	"qwrttqr-rate-limiter/core/server/metrics"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -18,7 +19,7 @@ type RateLimiter struct {
 	io.Closer
 }
 
-func NewRateLimiter() (_ *RateLimiter, err error) {
+func NewRateLimiter(rec metrics.Recorder) (_ *RateLimiter, err error) {
 	var cfg config.StandaloneServiceConfiguration
 	cfg, err = config.ReadConfig()
 	if err != nil {
@@ -61,7 +62,7 @@ func NewRateLimiter() (_ *RateLimiter, err error) {
 		if err := algos.ValidateTokenBucketConfig(cfg.AlgoSettings); err != nil {
 			return nil, err
 		}
-		store, err := algos.NewTokenBucketStore(cfg.UsedAlgo, mem, rdb, cfg.Backends.Redis.DefaultTtl)
+		store, err := algos.NewTokenBucketStore(cfg.Store, mem, rdb, cfg.Backends.Redis.DefaultTtl)
 		if err != nil {
 			return nil, err
 		}
@@ -75,7 +76,7 @@ func NewRateLimiter() (_ *RateLimiter, err error) {
 		if err := algos.ValidateFixedWindowConfig(cfg.AlgoSettings); err != nil {
 			return nil, err
 		}
-		store, err := algos.NewFixedWindowStore(cfg.UsedAlgo, mem, rdb, cfg.Backends.Redis.DefaultTtl)
+		store, err := algos.NewFixedWindowStore(cfg.Store, mem, rdb, cfg.Backends.Redis.DefaultTtl)
 		if err != nil {
 			return nil, err
 		}
@@ -89,7 +90,7 @@ func NewRateLimiter() (_ *RateLimiter, err error) {
 		if err := algos.ValidateRollingWindowConfig(cfg.AlgoSettings); err != nil {
 			return nil, err
 		}
-		store, err := algos.NewRollingWindowStore(cfg.UsedAlgo, mem, rdb, cfg.Backends.Redis.DefaultTtl)
+		store, err := algos.NewRollingWindowStore(cfg.Store, mem, rdb, cfg.Backends.Redis.DefaultTtl)
 		if err != nil {
 			return nil, err
 		}
@@ -103,5 +104,7 @@ func NewRateLimiter() (_ *RateLimiter, err error) {
 	default:
 		return nil, fmt.Errorf("unsupported rate limiting algorithm: %s", cfg.UsedAlgo)
 	}
+	limiter = metrics.Instrument(limiter, rec)
+
 	return &RateLimiter{Limiter: limiter, Closer: closer}, nil
 }
