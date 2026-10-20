@@ -16,6 +16,7 @@ type StandaloneServiceConfiguration struct {
 	BaseConfiguration `yaml:",inline"`
 	Store             string   `yaml:"store"`
 	Backends          Backends `yaml:"backends"`
+	UseMetrics        bool     `yaml:"use_metrics"`
 }
 
 type Backends struct {
@@ -51,6 +52,9 @@ func ReadConfig() (StandaloneServiceConfiguration, error) {
 	if err := yaml.Unmarshal(data, &config); err != nil {
 		return StandaloneServiceConfiguration{}, fmt.Errorf("parsing config yaml: %w", err)
 	}
+	if err := config.Validate(); err != nil {
+		return StandaloneServiceConfiguration{}, fmt.Errorf("invalid configuration: %w", err)
+	}
 	applyEnvOverrides(&config)
 	return config, nil
 }
@@ -59,4 +63,31 @@ func applyEnvOverrides(config *StandaloneServiceConfiguration) {
 	if v := os.Getenv("STORE_BACKEND"); v != "" {
 		config.Store = v
 	}
+}
+
+func (c *StandaloneServiceConfiguration) Validate() error {
+	if c.Store == "" {
+		return fmt.Errorf("field 'store' is required")
+	}
+	if c.UsedAlgo == "" {
+		return fmt.Errorf("field 'use_algo' is required")
+	}
+
+	switch c.Store {
+	case "in_memory":
+		if c.Backends.InMemory.ShardsCount == 0 {
+			return fmt.Errorf("backends.in_memory.shards_count must be greater than 0")
+		}
+		if c.Backends.InMemory.DefaultTtl <= 0 {
+			return fmt.Errorf("backends.in_memory.default_ttl must be positive")
+		}
+	case "redis":
+		if c.Backends.Redis.Addr == "" {
+			return fmt.Errorf("backends.redis.addr is required when store is 'redis'")
+		}
+	default:
+		return fmt.Errorf("unknown store configuration type: %q", c.Store)
+	}
+
+	return nil
 }

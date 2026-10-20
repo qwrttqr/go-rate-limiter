@@ -19,13 +19,7 @@ type RateLimiter struct {
 	io.Closer
 }
 
-func NewRateLimiter(rec metrics.Recorder) (_ *RateLimiter, err error) {
-	var cfg config.StandaloneServiceConfiguration
-	cfg, err = config.ReadConfig()
-	if err != nil {
-		return nil, fmt.Errorf("failed to read config: %w", err)
-	}
-
+func NewRateLimiter(cfg config.StandaloneServiceConfiguration, rec metrics.Recorder) (_ *RateLimiter, err error) {
 	var (
 		mem    cache.InMemoryStoreInterface
 		rdb    *redis.Client
@@ -104,7 +98,9 @@ func NewRateLimiter(rec metrics.Recorder) (_ *RateLimiter, err error) {
 	default:
 		return nil, fmt.Errorf("unsupported rate limiting algorithm: %s", cfg.UsedAlgo)
 	}
-	limiter = metrics.Instrument(limiter, rec)
+	if cfg.UseMetrics {
+		limiter = metrics.Instrument(limiter, rec)
+	}
 
 	return &RateLimiter{Limiter: limiter, Closer: closer}, nil
 }

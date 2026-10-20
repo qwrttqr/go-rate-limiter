@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"qwrttqr-rate-limiter/core/config"
 	"qwrttqr-rate-limiter/core/server/facade"
 	"qwrttqr-rate-limiter/core/server/limiting"
 	"qwrttqr-rate-limiter/core/server/metrics"
@@ -30,19 +31,19 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	cfg, err := config.ReadConfig()
+	if err != nil {
+		return fmt.Errorf("failed to read config: %w", err)
+	}
 	reg := prometheus.NewRegistry()
 	rec := metrics.NewPromRecorder(reg)
 
-	rl, err := limiting.NewRateLimiter(rec)
+	rl, err := limiting.NewRateLimiter(cfg, rec)
+
 	if err != nil {
 		return fmt.Errorf("create rate limiter: %w", err)
 	}
 	defer rl.Close()
-
-	metricsMux := http.NewServeMux()
-	metricsMux.Handle("GET /metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
-
-	metricsSrv := &http.Server{Addr: ":9091", Handler: metricsMux, ReadHeaderTimeout: 5 * time.Second}
 
 	limitingMux := http.NewServeMux()
 	limitingMux.HandleFunc("GET /health", facade.HealthHandler)
@@ -58,8 +59,21 @@ func run() error {
 	}
 	errCh := make(chan error, 3)
 
-	go func() { errCh <- metricsSrv.ListenAndServe() }()
-	log.Printf("metrics available on %s", metricsSrv.Addr)
+	shutdownMetrics := func(ctx context.Context) {}
+
+	if cfg.UseMetrics {
+		metricsMux := http.NewServeMux()
+		metricsMux.Handle("GET /metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
+
+		metricsSrv := &http.Server{Addr: ":9091", Handler: metricsMux, ReadHeaderTimeout: 5 * time.Second}
+		go func() { errCh <- metricsSrv.ListenAndServe() }()
+		log.Printf("metrics available on %s", metricsSrv.Addr)
+
+		shutdownMetrics = func(ctx context.Context) {
+			_ = metricsSrv.Shutdown(ctx)
+		}
+	}
+
 	go func() { errCh <- limitingSrv.ListenAndServe() }()
 	log.Printf("listening http on %s", limitingSrv.Addr)
 	go func() { errCh <- grpcSrv.Serve(tcpLis) }()
@@ -83,6 +97,6 @@ func run() error {
 		grpcSrv.Stop()
 	}
 
-	_ = metricsSrv.Shutdown(shutdownCtx)
+	shutdownMetrics(shutdownCtx)
 	return limitingSrv.Shutdown(shutdownCtx)
 }
