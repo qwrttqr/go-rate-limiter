@@ -5,10 +5,6 @@ algorithms.
 
 In-memory cache is implemented as sharded cache on default golang map with mutexes.
 
-## What will be done
-
-1. Admin part with limiting statistic in PostgreSQL
-
 ## What i am still thinking to add
 
 1. Support of etcd and other distributed data stores
@@ -36,6 +32,9 @@ The service is configured only through `config.yaml`. Create your own:
 ```yaml
 store: "in_memory"
 use_algo: "token_bucket"
+metrics:
+  use_prometheus: true
+  port: 9091
 algo_settings:
   capacity: 10
   rate: 0.5            # tokens per second
@@ -68,6 +67,10 @@ List of config:
         - `password` is Redis password.
         - `db` DB index inside Redis.
         - `default_ttl`: is a default TTL for Redis cache items.
+- `metrics` key is responsible for metrics of standalone service. Prometheus is used for metrics, and you cannot change
+  it to another observability framework right now.
+    - `use_prometheus` is disabling and enabling usage of Prometheus metrics. it's true or false.
+    - `port` is responsible from port that is gonna be used for observability handler.
 
 ### API
 
@@ -240,6 +243,18 @@ key or cost function returned an error, invalid cost).
 
 - `false`: reject the request (`503` / `UNAVAILABLE`).
 - `true`: let it through and log.
+
+## Metrics
+
+As it was said before metrics is supported only in standalone service mode. And Prometheus metrics is available through
+`/GET metrics` handler.
+
+The metrics key that service give access to:
+
+| Metric                                  | Type      | Explanation                                                     |
+|-----------------------------------------|-----------|-----------------------------------------------------------------|
+| `ratelimiter_decisions_total`           | Counter   | Total count by each decision: `allowed`, `denied` and `errored` |
+| `ratelimiter_decision_duration_seconds` | Histogram | Histogram for each decision type.                               |
 
 ## Benchmarks
 

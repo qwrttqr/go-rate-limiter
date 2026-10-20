@@ -14,9 +14,9 @@ type BaseConfiguration struct {
 
 type StandaloneServiceConfiguration struct {
 	BaseConfiguration `yaml:",inline"`
-	Store             string   `yaml:"store"`
-	Backends          Backends `yaml:"backends"`
-	UseMetrics        bool     `yaml:"use_metrics"`
+	Store             string          `yaml:"store"`
+	Backends          Backends        `yaml:"backends"`
+	Metrics           MetricsSettings `yaml:"metrics"`
 }
 
 type Backends struct {
@@ -28,6 +28,11 @@ type InMemoryBackendSettings struct {
 	DefaultTtl   int64  `yaml:"default_ttl"`
 	EvictionTime int64  `yaml:"eviction_time"`
 	ShardsCount  uint32 `yaml:"shards_count"`
+}
+
+type MetricsSettings struct {
+	UsePrometheus bool `yaml:"use_prometheus"`
+	Port          int  `yaml:"port"`
 }
 
 type RedisBackendSettings struct {

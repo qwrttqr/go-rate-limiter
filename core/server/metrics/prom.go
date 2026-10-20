@@ -8,34 +8,36 @@ import (
 
 type PromRecorder struct {
 	decisions    [NumResults]prometheus.Counter
-	durationHist prometheus.Histogram
+	durationHist [NumResults]prometheus.Observer
 }
 
 func NewPromRecorder(reg prometheus.Registerer) *PromRecorder {
-	cv := prometheus.NewCounterVec(prometheus.CounterOpts{
+	counterVec := prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "ratelimiter",
 		Name:      "decisions_total",
 		Help:      "Each decision count by its type.",
 	}, []string{"result"})
 
-	reqDurHist := prometheus.NewHistogram(prometheus.HistogramOpts{
+	reqDurHistVec := prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: "ratelimiter",
-		Name:      "processing_duration",
-		Help:      "Execution time of one decision in ms",
-		Buckets:   []float64{1, 5, 10, 20, 40, 80, 150, 300, 400},
-	})
-	reg.MustRegister(cv)
-	reg.MustRegister(reqDurHist)
-	p := &PromRecorder{
-		durationHist: reqDurHist,
-	}
-	p.decisions[Allowed] = cv.WithLabelValues("allowed")
-	p.decisions[Denied] = cv.WithLabelValues("denied")
-	p.decisions[Errored] = cv.WithLabelValues("errored")
+		Name:      "decision_duration_seconds",
+		Help:      "Execution time of one decision in seconds.",
+		Buckets:   []float64{0.00005, 0.0001, 0.0005, 0.001, 0.1, 0.5, 1, 2},
+	}, []string{"result"})
+	reg.MustRegister(counterVec)
+	reg.MustRegister(reqDurHistVec)
+	p := &PromRecorder{}
+
+	p.decisions[Allowed] = counterVec.WithLabelValues("allowed")
+	p.decisions[Denied] = counterVec.WithLabelValues("denied")
+	p.decisions[Errored] = counterVec.WithLabelValues("errored")
+	p.durationHist[Allowed] = reqDurHistVec.WithLabelValues("allowed")
+	p.durationHist[Denied] = reqDurHistVec.WithLabelValues("denied")
+	p.durationHist[Errored] = reqDurHistVec.WithLabelValues("errored")
 
 	return p
 }
 func (p *PromRecorder) ObserveDecision(r Result, dur time.Duration) {
 	p.decisions[r].Inc()
-	p.durationHist.Observe(float64(dur.Milliseconds()))
+	p.durationHist[r].Observe(dur.Seconds())
 }

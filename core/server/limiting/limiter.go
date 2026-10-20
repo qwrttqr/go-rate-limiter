@@ -98,7 +98,7 @@ func NewRateLimiter(cfg config.StandaloneServiceConfiguration, rec metrics.Recor
 	default:
 		return nil, fmt.Errorf("unsupported rate limiting algorithm: %s", cfg.UsedAlgo)
 	}
-	if cfg.UseMetrics {
+	if cfg.Metrics.UsePrometheus {
 		limiter = metrics.Instrument(limiter, rec)
 	}
 

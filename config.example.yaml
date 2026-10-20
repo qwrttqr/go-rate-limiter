@@ -1,5 +1,8 @@
 store: "in_memory"
 use_algo: "rolling_window"
+metrics:
+  use_prometheus: true
+  port: 9091
 algo_settings:
   window_size: 100 # seconds
   max_requests: 10

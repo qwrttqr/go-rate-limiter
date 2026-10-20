@@ -13,6 +13,7 @@ import (
 	"qwrttqr-rate-limiter/core/server/limiting"
 	"qwrttqr-rate-limiter/core/server/metrics"
 	ratelimiterv1 "qwrttqr-rate-limiter/gen/ratelimiter/v1"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -61,11 +62,11 @@ func run() error {
 
 	shutdownMetrics := func(ctx context.Context) {}
 
-	if cfg.UseMetrics {
+	if cfg.Metrics.UsePrometheus {
 		metricsMux := http.NewServeMux()
 		metricsMux.Handle("GET /metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
 
-		metricsSrv := &http.Server{Addr: ":9091", Handler: metricsMux, ReadHeaderTimeout: 5 * time.Second}
+		metricsSrv := &http.Server{Addr: ":" + strconv.Itoa(cfg.Metrics.Port), Handler: metricsMux, ReadHeaderTimeout: 5 * time.Second}
 		go func() { errCh <- metricsSrv.ListenAndServe() }()
 		log.Printf("metrics available on %s", metricsSrv.Addr)
 
