@@ -19,10 +19,10 @@ func newGRPCCheck(
 	costDer GRPCCostDerivationFunction,
 	failOpen bool,
 ) func(ctx context.Context) error {
+	if algo == nil || keyDer == nil {
+		panic("middleware: limiter and key function are required")
+	}
 	return func(ctx context.Context) error {
-		if algo == nil || keyDer == nil {
-			panic("middleware: limiter and key function are required")
-		}
 		fail := func(stage string, err error) error {
 			log.Printf("limiter error on %s: %v", stage, err)
 			if failOpen {
