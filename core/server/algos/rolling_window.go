@@ -3,6 +3,7 @@ package algos
 import (
 	"context"
 	"fmt"
+	"log"
 	"qwrttqr-rate-limiter/core/config"
 	"qwrttqr-rate-limiter/core/server/cache"
 	"time"
@@ -56,6 +57,7 @@ func (rwl *RollingWindowLimiter) Allow(ctx context.Context, req Request) (Decisi
 		rwl.Now(),
 	)
 	if err != nil {
+		log.Printf("rate limiter error while allow %s", err)
 		return Decision{}, err
 	}
 	return Decision{Allowed: allowed, RetryAfter: retryAfter}, nil

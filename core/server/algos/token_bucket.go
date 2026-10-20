@@ -3,6 +3,7 @@ package algos
 import (
 	"context"
 	"fmt"
+	"log"
 	"math"
 	"qwrttqr-rate-limiter/core/config"
 	"qwrttqr-rate-limiter/core/server/cache"
@@ -57,6 +58,7 @@ func (tbl *TokenBucketLimiter) Allow(ctx context.Context, req Request) (Decision
 		tbl.Capacity,
 	)
 	if err != nil {
+		log.Printf("rate limiter error while allow %s", err)
 		return Decision{}, err
 	}
 	return Decision{Allowed: allowed, RetryAfter: retryAfter}, nil
@@ -128,8 +130,8 @@ func (store *InMemoryTokenBucketStore) TakeToken(
 }
 
 var tokenBucketScript = redis.NewScript(`
-local capacity = tonumber(ARGV[1])
-local rate = tonumber(ARGV[2])
+local rate = tonumber(ARGV[1])
+local capacity = tonumber(ARGV[2])
 local tokensRequired = tonumber(ARGV[3])
 local now = tonumber(ARGV[4])
 local ttl = tonumber(ARGV[5])
@@ -168,5 +170,5 @@ func (s *RedisTokenBucketStore) TakeToken(
 	tokensRequired,
 	capacity float64,
 ) (bool, int64, error) {
-	return s.Backend.RunLuaScript(ctx, tokenBucketScript, []string{key}, rate, tokensRequired, capacity, now, s.Backend.DefaultTtl())
+	return s.Backend.RunLuaScript(ctx, tokenBucketScript, []string{key}, rate, capacity, tokensRequired, now, s.Backend.DefaultTtl())
 }

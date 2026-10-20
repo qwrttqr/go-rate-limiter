@@ -3,6 +3,7 @@ package algos
 import (
 	"context"
 	"fmt"
+	"log"
 	"qwrttqr-rate-limiter/core/config"
 	"qwrttqr-rate-limiter/core/server/cache"
 
@@ -47,6 +48,7 @@ func (fwl *FixedWindowLimiter) Allow(ctx context.Context, req Request) (Decision
 	allowed, retryAfter, err := fwl.Store.CheckAndIncrement(
 		ctx, req.Key, fwl.WindowSize, fwl.MaxRequests, fwl.Now())
 	if err != nil {
+		log.Printf("rate limiter error while allow %s", err)
 		return Decision{}, err
 	}
 	return Decision{Allowed: allowed, RetryAfter: retryAfter}, nil
