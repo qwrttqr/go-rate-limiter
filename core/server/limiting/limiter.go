@@ -6,7 +6,6 @@ import (
 	"qwrttqr-rate-limiter/core/config"
 	"qwrttqr-rate-limiter/core/server/algos"
 	"qwrttqr-rate-limiter/core/server/cache"
-	"qwrttqr-rate-limiter/core/server/metrics"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -19,7 +18,7 @@ type RateLimiter struct {
 	io.Closer
 }
 
-func NewRateLimiter(cfg config.StandaloneServiceConfiguration, rec metrics.Recorder) (_ *RateLimiter, err error) {
+func NewRateLimiter(cfg config.StandaloneServiceConfiguration) (_ *RateLimiter, err error) {
 	var (
 		mem    cache.InMemoryStoreInterface
 		rdb    *redis.Client
@@ -97,9 +96,6 @@ func NewRateLimiter(cfg config.StandaloneServiceConfiguration, rec metrics.Recor
 
 	default:
 		return nil, fmt.Errorf("unsupported rate limiting algorithm: %s", cfg.UsedAlgo)
-	}
-	if cfg.Metrics.UsePrometheus {
-		limiter = metrics.Instrument(limiter, rec)
 	}
 
 	return &RateLimiter{Limiter: limiter, Closer: closer}, nil

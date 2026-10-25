@@ -37,6 +37,13 @@ func ValidateTokenBucketConfig(cfg config.AlgoSettings) error {
 	return CheckRequiredFields(cfg, []string{"capacity", "rate"})
 }
 
+type InMemoryTokenBucketStore struct {
+	Backend cache.InMemoryStoreInterface
+}
+type RedisTokenBucketStore struct {
+	Backend cache.RedisStoreInterface
+}
+
 func NewTokenBucketStore(store string, cacheInstance cache.InMemoryStoreInterface, redisClient *redis.Client, redisDefaultKeyTTL int64) (TokenBucketStore, error) {
 	switch store {
 	case "in_memory":
@@ -62,13 +69,6 @@ func (tbl *TokenBucketLimiter) Allow(ctx context.Context, req Request) (Decision
 		return Decision{}, err
 	}
 	return Decision{Allowed: allowed, RetryAfter: retryAfter}, nil
-}
-
-type InMemoryTokenBucketStore struct {
-	Backend cache.InMemoryStoreInterface
-}
-type RedisTokenBucketStore struct {
-	Backend cache.RedisStoreInterface
 }
 
 type TokenBucketState struct {

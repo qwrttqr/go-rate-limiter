@@ -2,7 +2,7 @@
 
 PKG     ?= ./bench
 
-COUNT   ?= 10
+COUNT   ?= 1
 CPUS    ?= 1,4,8,12
 
 

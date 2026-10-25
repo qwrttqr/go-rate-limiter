@@ -15,6 +15,7 @@ import (
 type RollingWindowStore interface {
 	CheckAndIncrement(ctx context.Context, key string, windowSize, maxRequests, now int64) (bool, int64, error)
 }
+
 type RollingWindowLimiter struct {
 	WindowSize  int64
 	MaxRequests int64
@@ -35,6 +36,14 @@ func ValidateRollingWindowConfig(cfg config.AlgoSettings) error {
 		return fmt.Errorf("the max requests param should be strictly greater then 0")
 	}
 	return CheckRequiredFields(cfg, []string{"window_size", "max_requests"})
+}
+
+type InMemoryRollingWindowStore struct {
+	Backend cache.InMemoryStoreInterface
+}
+
+type RedisRollingWindowStore struct {
+	Backend cache.RedisStoreInterface
 }
 
 func NewRollingWindowStore(store string, cacheInstance cache.InMemoryStoreInterface, redisClient *redis.Client, redisDefaultKeyTTL int64) (RollingWindowStore, error) {
@@ -91,14 +100,6 @@ func (rws *RollingWindowState) check(
 	return false, retryAfter
 }
 
-type InMemoryRollingWindowStore struct {
-	Backend cache.InMemoryStoreInterface
-}
-
-type RedisRollingWindowStore struct {
-	Backend cache.RedisStoreInterface
-}
-
 func (store *InMemoryRollingWindowStore) CheckAndIncrement(
 	_ context.Context,
 	key string,
@@ -108,7 +109,7 @@ func (store *InMemoryRollingWindowStore) CheckAndIncrement(
 ) (allowed bool, retryAfter int64, err error) {
 	err = store.Backend.Update(
 		key,
-		func() any { return &RollingWindowState{Timestamps: make([]int64, 0, 8)} },
+		func() any { return &RollingWindowState{Timestamps: make([]int64, 0, 32)} },
 		func(v any) error {
 			st, ok := v.(*RollingWindowState)
 			if !ok {

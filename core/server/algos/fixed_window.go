@@ -33,6 +33,14 @@ func ValidateFixedWindowConfig(cfg config.AlgoSettings) error {
 	return nil
 }
 
+type InMemoryFixedWindowStore struct {
+	Backend cache.InMemoryStoreInterface
+}
+
+type RedisFixedWindowStore struct {
+	Store cache.RedisStoreInterface
+}
+
 func NewFixedWindowStore(store string, cacheInstance cache.InMemoryStoreInterface, redisClient *redis.Client, redisDefaultKeyTTL int64) (FixedWindowStore, error) {
 	switch store {
 	case "in_memory":
@@ -54,13 +62,6 @@ func (fwl *FixedWindowLimiter) Allow(ctx context.Context, req Request) (Decision
 	return Decision{Allowed: allowed, RetryAfter: retryAfter}, nil
 }
 
-type InMemoryFixedWindowStore struct {
-	Backend cache.InMemoryStoreInterface
-}
-
-type RedisFixedWindowStore struct {
-	Store cache.RedisStoreInterface
-}
 type FixedWindowState struct {
 	Count        int64
 	StoredWindow int64

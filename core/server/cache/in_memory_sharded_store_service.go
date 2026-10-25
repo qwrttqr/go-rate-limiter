@@ -1,7 +1,6 @@
 package cache
 
 import (
-	"errors"
 	"sync"
 	"time"
 )
@@ -34,25 +33,6 @@ func (cache *ShardedInMemoryStore) getShard(key string) *shard {
 	return cache.shards[h&(cache.shardsCount-1)]
 }
 
-func (cache *ShardedInMemoryStore) Store(key string, value any) {
-	shard := cache.getShard(key)
-	shard.mu.Lock()
-	defer shard.mu.Unlock()
-	shard.entries[key] = &cacheEntry{entry: value, lastAccess: time.Now().Unix()}
-}
-
-func (cache *ShardedInMemoryStore) Get(key string) (any, error) {
-	shard := cache.getShard(key)
-	shard.mu.Lock()
-	defer shard.mu.Unlock()
-	result, present := shard.entries[key]
-	if !present {
-		return nil, errors.New("cache entry is not present")
-	}
-	result.lastAccess = time.Now().Unix()
-	return result.entry, nil
-}
-
 func (cache *ShardedInMemoryStore) Update(key string, createFn func() any, fn func(v any) error) error {
 	shard := cache.getShard(key)
 	shard.mu.Lock()
@@ -63,29 +43,8 @@ func (cache *ShardedInMemoryStore) Update(key string, createFn func() any, fn fu
 		value = &cacheEntry{entry: createFn(), lastAccess: now}
 		shard.entries[key] = value
 	}
-	value.lastAccess = time.Now().Unix()
+	value.lastAccess = now
 	return fn(value.entry)
-}
-
-func (cache *ShardedInMemoryStore) LoadOrStore(key string, createFn func() any) any {
-	shard := cache.getShard(key)
-	shard.mu.Lock()
-	defer shard.mu.Unlock()
-	result, present := shard.entries[key]
-	if !present {
-		value := createFn()
-		shard.entries[key] = &cacheEntry{entry: value, lastAccess: time.Now().Unix()}
-		return value
-	}
-	result.lastAccess = time.Now().Unix()
-	return result.entry
-}
-
-func (cache *ShardedInMemoryStore) Delete(key string) {
-	shard := cache.getShard(key)
-	shard.mu.Lock()
-	defer shard.mu.Unlock()
-	delete(shard.entries, key)
 }
 
 func (cache *ShardedInMemoryStore) handleEviction() {

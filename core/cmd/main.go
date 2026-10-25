@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"qwrttqr-rate-limiter/core/config"
+	"qwrttqr-rate-limiter/core/server/algos"
 	"qwrttqr-rate-limiter/core/server/facade"
 	"qwrttqr-rate-limiter/core/server/limiting"
 	"qwrttqr-rate-limiter/core/server/metrics"
@@ -36,33 +37,25 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("failed to read config: %w", err)
 	}
-	reg := prometheus.NewRegistry()
-	rec := metrics.NewPromRecorder(reg)
 
-	rl, err := limiting.NewRateLimiter(cfg, rec)
+	rl, err := limiting.NewRateLimiter(cfg)
 
 	if err != nil {
 		return fmt.Errorf("create rate limiter: %w", err)
 	}
 	defer rl.Close()
 
-	limitingMux := http.NewServeMux()
-	limitingMux.HandleFunc("GET /health", facade.HealthHandler)
-	limitingMux.HandleFunc("POST /limit", facade.LimitHandler(rl))
+	var limiter algos.Limiter = rl
 
-	limitingSrv := &http.Server{Addr: ":8080", Handler: limitingMux, ReadHeaderTimeout: 5 * time.Second}
-	grpcSrv := grpc.NewServer()
-	ratelimiterv1.RegisterRateLimiterServer(grpcSrv, facade.NewGRPCServer(rl))
-
-	tcpLis, err := net.Listen("tcp", ":8081")
-	if err != nil {
-		return fmt.Errorf("listen grpc: %w", err)
-	}
 	errCh := make(chan error, 3)
 
 	shutdownMetrics := func(ctx context.Context) {}
 
 	if cfg.Metrics.UsePrometheus {
+		reg := prometheus.NewRegistry()
+		rec := metrics.NewPromRecorder(reg)
+		limiter = metrics.Instrument(limiter, rec)
+
 		metricsMux := http.NewServeMux()
 		metricsMux.Handle("GET /metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
 
@@ -73,6 +66,19 @@ func run() error {
 		shutdownMetrics = func(ctx context.Context) {
 			_ = metricsSrv.Shutdown(ctx)
 		}
+	}
+
+	limitingMux := http.NewServeMux()
+	limitingMux.HandleFunc("GET /health", facade.HealthHandler)
+	limitingMux.HandleFunc("POST /limit", facade.LimitHandler(limiter))
+
+	limitingSrv := &http.Server{Addr: ":8080", Handler: limitingMux, ReadHeaderTimeout: 5 * time.Second}
+	grpcSrv := grpc.NewServer()
+	ratelimiterv1.RegisterRateLimiterServer(grpcSrv, facade.NewGRPCServer(limiter))
+
+	tcpLis, err := net.Listen("tcp", ":8081")
+	if err != nil {
+		return fmt.Errorf("listen grpc: %w", err)
 	}
 
 	go func() { errCh <- limitingSrv.ListenAndServe() }()

@@ -87,9 +87,3 @@ func (b *redisBackend) FixedWindow(cfg config.AlgoSettings) (algos.Limiter, erro
 func (b *redisBackend) RollingWindow(cfg config.AlgoSettings) (algos.Limiter, error) {
 	return newRollingWindow(cfg, &algos.RedisRollingWindowStore{Backend: b.redis})
 }
-
-var limiterBuilders = map[string]func(Backend, config.AlgoSettings) (algos.Limiter, error){
-	"token_bucket":   Backend.TokenBucket,
-	"fixed_window":   Backend.FixedWindow,
-	"rolling_window": Backend.RollingWindow,
-}
